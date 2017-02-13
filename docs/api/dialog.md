@@ -51,6 +51,8 @@ The `dialog` module has the following methods:
     untouched on Windows. For example, a button label of `Vie&w` will be
     converted to `Vie_w` on Linux and `View` on macOS and can be selected
     via `Alt-W` on Windows and Linux.
+    * `message` String (optional) _macOS_ - Message to display above input
+      boxes.
 * `callback` Function (optional)
   * `filePaths` String[] - An array of file paths chosen by the user
 
@@ -94,6 +96,11 @@ shown.
   * `buttonLabel` String (optional) - Custom label for the confirmation button, when
     left empty the default label will be used.
   * `filters` [FileFilter[]](structures/file-filter.md) (optional)
+  * `message` String (optional) _macOS_ - Message to display above text fields.
+  * `nameFieldLabel` String (optional) _macOS_ - Custom label for the text
+    displayed in front of the filename text field.
+  * `showsTagField` Boolean (optional) _macOS_ - Show the tags input box,
+    defaults to `true`.
 * `callback` Function (optional)
   * `filename` String
 
@@ -122,6 +129,11 @@ will be passed via `callback(filename)`
   * `title` String (optional) - Title of the message box, some platforms will not show it.
   * `message` String - Content of the message box.
   * `detail` String (optional) - Extra information of the message.
+  * `checkboxLabel` String (optional) - If provided, the message box will
+    include a checkbox with the given label. The checkbox state can be
+    inspected only when using `callback`.
+  * `checkboxChecked` Boolean (optional) - Initial checked state of the
+    checkbox. `false` by default.
   * `icon` [NativeImage](native-image.md) (optional)
   * `cancelId` Integer (optional) - The value will be returned when user cancels the dialog
     instead of clicking the buttons of the dialog. By default it is the index
@@ -135,6 +147,8 @@ will be passed via `callback(filename)`
     set `noLink` to `true`.
 * `callback` Function (optional)
   * `response` Number - The index of the button that was clicked
+  * `checkboxChecked` Boolean - The checked state of the checkbox if
+    `checkboxLabel` was set. Otherwise `false`.
 
 Returns `Integer`, the index of the clicked button, if a callback is provided
 it returns undefined.

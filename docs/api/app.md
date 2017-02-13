@@ -401,6 +401,28 @@ You can request the following paths by the name:
 * `videos` Directory for a user's videos.
 * `pepperFlashSystemPlugin`  Full path to the system version of the Pepper Flash plugin.
 
+### `app.getFileIcon(path[, options], callback)`
+
+* `path` String
+* `options` Object (optional)
+  * `size` String
+    * `small` - 16x16
+    * `normal` - 32x32
+    * `large` - 48x48 on _Linux_, 32x32 on _Windows_, unsupported on _macOS_.
+* `callback` Function
+  * `error` Error
+  * `icon` [NativeImage](native-image.md)
+
+Fetches a path's associated icon.
+
+On _Windows_, there a 2 kinds of icons:
+
+- Icons associated with certain file extensions, like `.mp3`, `.png`, etc.
+- Icons inside the file itself, like `.exe`, `.dll`, `.ico`.
+
+On _Linux_ and _macOS_, icons depend on the application associated with file
+mime type.
+
 ### `app.setPath(name, path)`
 
 * `name` String
@@ -758,7 +780,16 @@ Returns `Integer` - The current value displayed in the counter badge.
 
 Returns `Boolean` - Whether the current desktop environment is Unity launcher.
 
-### `app.getLoginItemSettings()` _macOS_ _Windows_
+### `app.getLoginItemSettings([options])` _macOS_ _Windows_
+
+* `options` Object (optional)
+  * `path` String (optional) _Windows_ - The executable path to compare against.
+    Defaults to `process.execPath`.
+  * `args` String[] (optional) _Windows_ - The command-line arguments to compare
+    against. Defaults to an empty array.
+
+If you provided `path` and `args` options to `app.setLoginItemSettings` then you
+need to pass the same arguments here for `openAtLogin` to be set correctly.
 
 Returns `Object`:
 
@@ -775,10 +806,9 @@ Returns `Object`:
   app should restore the windows that were open the last time the app was
   closed. This setting is only supported on macOS.
 
-**Note:** This API has no effect on
-[MAS builds][mas-builds].
+**Note:** This API has no effect on [MAS builds][mas-builds].
 
-### `app.setLoginItemSettings(settings)` _macOS_ _Windows_
+### `app.setLoginItemSettings(settings[, path, args])` _macOS_ _Windows_
 
 * `settings` Object
   * `openAtLogin` Boolean (optional) - `true` to open the app at login, `false` to remove
@@ -788,11 +818,34 @@ Returns `Object`:
     `app.getLoginItemStatus().wasOpenedAsHidden` should be checked when the app
     is opened to know the current value. This setting is only supported on
     macOS.
+  * `path` String (optional) _Windows_ - The executable to launch at login.
+    Defaults to `process.execPath`.
+  * `args` String[] (optional) _Windows_ - The command-line arguments to pass to
+    the executable. Defaults to an empty array. Take care to wrap paths in
+    quotes.
 
 Set the app's login item settings.
 
-**Note:** This API has no effect on
-[MAS builds][mas-builds].
+To work with Electron's `autoUpdater` on Windows, which uses [Squirrel][Squirrel-Windows],
+you'll want to set the launch path to Update.exe, and pass arguments that specify your
+application name. For example:
+
+``` javascript
+const appFolder = path.dirname(process.execPath)
+const updateExe = path.resolve(appFolder, '..', 'Update.exe')
+const exeName = path.basename(process.execPath)
+
+app.setLoginItemSettings({
+  openAtLogin: true,
+  path: updateExe,
+  args: [
+    '--processStart', `"${exeName}"`,
+    '--process-start-args', `"--hidden"`
+  ]
+})
+```
+
+**Note:** This API has no effect on [MAS builds][mas-builds].
 
 ### `app.isAccessibilitySupportEnabled()` _macOS_ _Windows_
 
@@ -904,5 +957,6 @@ Sets the `image` associated with this dock icon.
 [activity-type]: https://developer.apple.com/library/ios/documentation/Foundation/Reference/NSUserActivity_Class/index.html#//apple_ref/occ/instp/NSUserActivity/activityType
 [unity-requirement]: ../tutorial/desktop-environment-integration.md#unity-launcher-shortcuts-linux
 [mas-builds]: ../tutorial/mac-app-store-submission-guide.md
+[Squirrel-Windows]: https://github.com/Squirrel/Squirrel.Windows
 [JumpListBeginListMSDN]: https://msdn.microsoft.com/en-us/library/windows/desktop/dd378398(v=vs.85).aspx
 [about-panel-options]: https://developer.apple.com/reference/appkit/nsapplication/1428479-orderfrontstandardaboutpanelwith?language=objc

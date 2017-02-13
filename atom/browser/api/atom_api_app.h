@@ -10,8 +10,10 @@
 
 #include "atom/browser/api/event_emitter.h"
 #include "atom/browser/atom_browser_client.h"
+#include "atom/browser/browser.h"
 #include "atom/browser/browser_observer.h"
 #include "atom/common/native_mate_converters/callback.h"
+#include "chrome/browser/icon_loader.h"
 #include "chrome/browser/process_singleton.h"
 #include "content/public/browser/gpu_data_manager_observer.h"
 #include "native_mate/handle.h"
@@ -42,6 +44,9 @@ class App : public AtomBrowserClient::Delegate,
             public BrowserObserver,
             public content::GpuDataManagerObserver {
  public:
+  using FileIconCallback = base::Callback<void(v8::Local<v8::Value>,
+                                               const gfx::Image&)>;
+
   static mate::Handle<App> Create(v8::Isolate* isolate);
 
   static void BuildPrototype(v8::Isolate* isolate,
@@ -52,7 +57,7 @@ class App : public AtomBrowserClient::Delegate,
       const GURL& target_url,
       const std::string& frame_name,
       WindowOpenDisposition disposition,
-      const std::vector<base::string16>& features,
+      const std::vector<std::string>& features,
       const scoped_refptr<content::ResourceRequestBodyImpl>& body,
       int render_process_id,
       int render_frame_id);
@@ -123,10 +128,13 @@ class App : public AtomBrowserClient::Delegate,
   bool Relaunch(mate::Arguments* args);
   void DisableHardwareAcceleration(mate::Arguments* args);
   bool IsAccessibilitySupportEnabled();
+  Browser::LoginItemSettings GetLoginItemSettings(mate::Arguments* args);
 #if defined(USE_NSS_CERTS)
   void ImportCertificate(const base::DictionaryValue& options,
                          const net::CompletionCallback& callback);
 #endif
+  void GetFileIcon(const base::FilePath& path,
+                   mate::Arguments* args);
 
 #if defined(OS_WIN)
   // Get the current Jump List settings.

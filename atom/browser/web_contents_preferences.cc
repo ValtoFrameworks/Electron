@@ -130,13 +130,6 @@ void WebContentsPreferences::AppendExtraCommandLineSwitches(
   if (web_preferences.GetString(options::kBackgroundColor, &color))
     command_line->AppendSwitchASCII(switches::kBackgroundColor, color);
 
-  // The zoom factor.
-  double zoom_factor = 1.0;
-  if (web_preferences.GetDouble(options::kZoomFactor, &zoom_factor) &&
-      zoom_factor != 1.0)
-    command_line->AppendSwitchASCII(switches::kZoomFactor,
-                                    base::DoubleToString(zoom_factor));
-
   // --guest-instance-id, which is used to identify guest WebContents.
   int guest_instance_id = 0;
   if (web_preferences.GetInteger(options::kGuestInstanceID, &guest_instance_id))
@@ -233,11 +226,8 @@ void WebContentsPreferences::OverrideWebkitPrefs(
     prefs->experimental_webgl_enabled = b;
   if (self->web_preferences_.GetBoolean("webSecurity", &b)) {
     prefs->web_security_enabled = b;
-    prefs->allow_displaying_insecure_content = !b;
     prefs->allow_running_insecure_content = !b;
   }
-  if (self->web_preferences_.GetBoolean("allowDisplayingInsecureContent", &b))
-    prefs->allow_displaying_insecure_content = b;
   if (self->web_preferences_.GetBoolean("allowRunningInsecureContent", &b))
     prefs->allow_running_insecure_content = b;
   const base::DictionaryValue* fonts = nullptr;
@@ -257,15 +247,28 @@ void WebContentsPreferences::OverrideWebkitPrefs(
       prefs->fantasy_font_family_map[content::kCommonScript] = font;
   }
   int size;
-  if (self->web_preferences_.GetInteger("defaultFontSize", &size))
+  if (self->GetInteger("defaultFontSize", &size))
     prefs->default_font_size = size;
-  if (self->web_preferences_.GetInteger("defaultMonospaceFontSize", &size))
+  if (self->GetInteger("defaultMonospaceFontSize", &size))
     prefs->default_fixed_font_size = size;
-  if (self->web_preferences_.GetInteger("minimumFontSize", &size))
+  if (self->GetInteger("minimumFontSize", &size))
     prefs->minimum_font_size = size;
   std::string encoding;
   if (self->web_preferences_.GetString("defaultEncoding", &encoding))
     prefs->default_encoding = encoding;
+}
+
+bool WebContentsPreferences::GetInteger(const std::string& attributeName,
+                                        int* intValue) {
+  // if it is already an integer, no conversion needed
+  if (web_preferences_.GetInteger(attributeName, intValue))
+    return true;
+
+  base::string16 stringValue;
+  if (web_preferences_.GetString(attributeName, &stringValue))
+    return base::StringToInt(stringValue, intValue);
+
+  return false;
 }
 
 }  // namespace atom

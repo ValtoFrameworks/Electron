@@ -38,14 +38,9 @@ void AtomJavaScriptDialogManager::RunJavaScriptDialog(
   }
 
   atom::ShowMessageBox(NativeWindow::FromWebContents(web_contents),
-                       atom::MessageBoxType::MESSAGE_BOX_TYPE_NONE,
-                       buttons,
-                       -1,
-                       0,
-                       atom::MessageBoxOptions::MESSAGE_BOX_NONE,
-                       "",
-                       base::UTF16ToUTF8(message_text),
-                       "",
+                       atom::MessageBoxType::MESSAGE_BOX_TYPE_NONE, buttons, -1,
+                       0, atom::MessageBoxOptions::MESSAGE_BOX_NONE, "",
+                       base::UTF16ToUTF8(message_text), "", "", false,
                        gfx::ImageSkia(),
                        base::Bind(&OnMessageBoxCallback, callback));
 }
@@ -58,9 +53,17 @@ void AtomJavaScriptDialogManager::RunBeforeUnloadDialog(
   callback.Run(false, base::ASCIIToUTF16("This should not be displayed"));
 }
 
+void AtomJavaScriptDialogManager::CancelDialogs(
+    content::WebContents* web_contents,
+    bool suppress_callbacks,
+    bool reset_state) {
+}
+
 // static
 void AtomJavaScriptDialogManager::OnMessageBoxCallback(
-    const DialogClosedCallback& callback, int code) {
+    const DialogClosedCallback& callback,
+    int code,
+    bool checkbox_checked) {
   callback.Run(code == 0, base::string16());
 }
 

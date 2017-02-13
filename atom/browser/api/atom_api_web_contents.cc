@@ -13,7 +13,6 @@
 #include "atom/browser/atom_browser_client.h"
 #include "atom/browser/atom_browser_context.h"
 #include "atom/browser/atom_browser_main_parts.h"
-#include "atom/browser/atom_security_state_model_client.h"
 #include "atom/browser/lib/bluetooth_chooser.h"
 #include "atom/browser/native_window.h"
 #include "atom/browser/net/atom_network_delegate.h"
@@ -23,6 +22,7 @@
 #include "atom/browser/ui/drag_util.h"
 #include "atom/browser/web_contents_permission_helper.h"
 #include "atom/browser/web_contents_preferences.h"
+#include "atom/browser/web_contents_zoom_controller.h"
 #include "atom/browser/web_view_guest_delegate.h"
 #include "atom/common/api/api_messages.h"
 #include "atom/common/api/event_emitter_caller.h"
@@ -45,6 +45,7 @@
 #include "brightray/browser/inspectable_web_contents_view.h"
 #include "chrome/browser/printing/print_preview_message_handler.h"
 #include "chrome/browser/printing/print_view_manager_basic.h"
+#include "chrome/browser/ssl/security_state_tab_helper.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/common/view_messages.h"
@@ -68,8 +69,8 @@
 #include "native_mate/dictionary.h"
 #include "native_mate/object_template_builder.h"
 #include "net/url_request/url_request_context.h"
+#include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "third_party/WebKit/public/web/WebFindOptions.h"
-#include "third_party/WebKit/public/web/WebInputEvent.h"
 #include "ui/display/screen.h"
 
 #if !defined(OS_MACOSX)
@@ -130,12 +131,24 @@ struct Converter<WindowOpenDisposition> {
                                    WindowOpenDisposition val) {
     std::string disposition = "other";
     switch (val) {
-      case CURRENT_TAB: disposition = "default"; break;
-      case NEW_FOREGROUND_TAB: disposition = "foreground-tab"; break;
-      case NEW_BACKGROUND_TAB: disposition = "background-tab"; break;
-      case NEW_POPUP: case NEW_WINDOW: disposition = "new-window"; break;
-      case SAVE_TO_DISK: disposition = "save-to-disk"; break;
-      default: break;
+      case WindowOpenDisposition::CURRENT_TAB:
+        disposition = "default";
+        break;
+      case WindowOpenDisposition::NEW_FOREGROUND_TAB:
+        disposition = "foreground-tab";
+        break;
+      case WindowOpenDisposition::NEW_BACKGROUND_TAB:
+        disposition = "background-tab";
+        break;
+      case WindowOpenDisposition::NEW_POPUP:
+      case WindowOpenDisposition::NEW_WINDOW:
+        disposition = "new-window";
+        break;
+      case WindowOpenDisposition::SAVE_TO_DISK:
+        disposition = "save-to-disk";
+        break;
+      default:
+        break;
     }
     return mate::ConvertToV8(isolate, disposition);
   }
@@ -236,11 +249,11 @@ WebContents::WebContents(v8::Isolate* isolate,
                          Type type)
     : content::WebContentsObserver(web_contents),
       embedder_(nullptr),
+      zoom_controller_(nullptr),
       type_(type),
       request_id_(0),
       background_throttling_(true),
       enable_devtools_(true) {
-
   if (type == REMOTE) {
     web_contents->SetUserAgentOverride(GetBrowserContext()->GetUserAgent());
     Init(isolate);
@@ -253,9 +266,9 @@ WebContents::WebContents(v8::Isolate* isolate,
   }
 }
 
-WebContents::WebContents(v8::Isolate* isolate,
-                         const mate::Dictionary& options)
+WebContents::WebContents(v8::Isolate* isolate, const mate::Dictionary& options)
     : embedder_(nullptr),
+      zoom_controller_(nullptr),
       type_(BROWSER_WINDOW),
       request_id_(0),
       background_throttling_(true),
@@ -333,10 +346,16 @@ void WebContents::InitWithSessionAndOptions(v8::Isolate* isolate,
   // Save the preferences in C++.
   new WebContentsPreferences(web_contents, options);
 
-  // Intialize permission helper.
+  // Initialize permission helper.
   WebContentsPermissionHelper::CreateForWebContents(web_contents);
-  // Intialize security state client.
-  AtomSecurityStateModelClient::CreateForWebContents(web_contents);
+  // Initialize security state client.
+  SecurityStateTabHelper::CreateForWebContents(web_contents);
+  // Initialize zoom controller.
+  WebContentsZoomController::CreateForWebContents(web_contents);
+  zoom_controller_ = WebContentsZoomController::FromWebContents(web_contents);
+  double zoom_factor;
+  if (options.Get(options::kZoomFactor, &zoom_factor))
+    zoom_controller_->SetDefaultZoomFactor(zoom_factor);
 
   web_contents->SetUserAgentOverride(GetBrowserContext()->GetUserAgent());
 
@@ -375,11 +394,11 @@ WebContents::~WebContents() {
   }
 }
 
-bool WebContents::AddMessageToConsole(content::WebContents* source,
-                                      int32_t level,
-                                      const base::string16& message,
-                                      int32_t line_no,
-                                      const base::string16& source_id) {
+bool WebContents::DidAddMessageToConsole(content::WebContents* source,
+                                         int32_t level,
+                                         const base::string16& message,
+                                         int32_t line_no,
+                                         const base::string16& source_id) {
   if (type_ == BROWSER_WINDOW || type_ == OFF_SCREEN) {
     return false;
   } else {
@@ -392,7 +411,7 @@ void WebContents::OnCreateWindow(
     const GURL& target_url,
     const std::string& frame_name,
     WindowOpenDisposition disposition,
-    const std::vector<base::string16>& features,
+    const std::vector<std::string>& features,
     const scoped_refptr<content::ResourceRequestBodyImpl>& body) {
   if (type_ == BROWSER_WINDOW || type_ == OFF_SCREEN)
     Emit("-new-window", target_url, frame_name, disposition, features, body);
@@ -401,6 +420,7 @@ void WebContents::OnCreateWindow(
 }
 
 void WebContents::WebContentsCreated(content::WebContents* source_contents,
+                                     int opener_render_process_id,
                                      int opener_render_frame_id,
                                      const std::string& frame_name,
                                      const GURL& target_url,
@@ -430,7 +450,7 @@ void WebContents::AddNewContents(content::WebContents* source,
 content::WebContents* WebContents::OpenURLFromTab(
     content::WebContents* source,
     const content::OpenURLParams& params) {
-  if (params.disposition != CURRENT_TAB) {
+  if (params.disposition != WindowOpenDisposition::CURRENT_TAB) {
     if (type_ == BROWSER_WINDOW || type_ == OFF_SCREEN)
       Emit("-new-window", params.url, "", params.disposition);
     else
@@ -530,7 +550,9 @@ void WebContents::ExitFullscreenModeForTab(content::WebContents* source) {
   Emit("leave-html-full-screen");
 }
 
-void WebContents::RendererUnresponsive(content::WebContents* source) {
+void WebContents::RendererUnresponsive(
+    content::WebContents* source,
+    const content::WebContentsUnresponsiveState& unresponsive_state) {
   Emit("unresponsive");
   if ((type_ == BROWSER_WINDOW || type_ == OFF_SCREEN) && owner_window())
     owner_window()->RendererUnresponsive(source);
@@ -640,11 +662,13 @@ void WebContents::PluginCrashed(const base::FilePath& plugin_path,
   Emit("plugin-crashed", info.name, info.version);
 }
 
-void WebContents::MediaStartedPlaying(const MediaPlayerId& id) {
+void WebContents::MediaStartedPlaying(const MediaPlayerInfo& video_type,
+                                      const MediaPlayerId& id) {
   Emit("media-started-playing");
 }
 
-void WebContents::MediaStoppedPlaying(const MediaPlayerId& id) {
+void WebContents::MediaStoppedPlaying(const MediaPlayerInfo& video_type,
+                                      const MediaPlayerId& id) {
   Emit("media-paused");
 }
 
@@ -698,7 +722,6 @@ void WebContents::DidGetResourceResponseStart(
 }
 
 void WebContents::DidGetRedirectForResourceRequest(
-    content::RenderFrameHost* render_frame_host,
     const content::ResourceRedirectDetails& details) {
   Emit("did-get-redirect-request",
        details.url,
@@ -796,6 +819,10 @@ bool WebContents::OnMessageReceived(const IPC::Message& message) {
     IPC_MESSAGE_HANDLER(AtomViewHostMsg_Message, OnRendererMessage)
     IPC_MESSAGE_HANDLER_DELAY_REPLY(AtomViewHostMsg_Message_Sync,
                                     OnRendererMessageSync)
+    IPC_MESSAGE_HANDLER_DELAY_REPLY(AtomViewHostMsg_SetTemporaryZoomLevel,
+                                    OnSetTemporaryZoomLevel)
+    IPC_MESSAGE_HANDLER_DELAY_REPLY(AtomViewHostMsg_GetZoomLevel,
+                                    OnGetZoomLevel)
     IPC_MESSAGE_HANDLER_CODE(ViewHostMsg_SetCursor, OnCursorChange,
       handled = false)
     IPC_MESSAGE_UNHANDLED(handled = false)
@@ -1076,7 +1103,7 @@ void WebContents::InspectServiceWorker() {
 
   for (const auto& agent_host : content::DevToolsAgentHost::GetOrCreateAll()) {
     if (agent_host->GetType() ==
-        content::DevToolsAgentHost::TYPE_SERVICE_WORKER) {
+        content::DevToolsAgentHost::kTypeServiceWorker) {
       OpenDevTools(nullptr);
       managed_web_contents()->AttachTo(agent_host);
       break;
@@ -1121,7 +1148,9 @@ void WebContents::Print(mate::Arguments* args) {
   }
 
   printing::PrintViewManagerBasic::FromWebContents(web_contents())->
-      PrintNow(settings.silent, settings.print_background);
+      PrintNow(web_contents()->GetMainFrame(),
+               settings.silent,
+               settings.print_background);
 }
 
 void WebContents::PrintToPDF(const base::DictionaryValue& setting,
@@ -1480,6 +1509,37 @@ void WebContents::Invalidate() {
     osr_rwhv->Invalidate();
 }
 
+void WebContents::SetZoomLevel(double level) {
+  zoom_controller_->SetZoomLevel(level);
+}
+
+double WebContents::GetZoomLevel() {
+  return zoom_controller_->GetZoomLevel();
+}
+
+void WebContents::SetZoomFactor(double factor) {
+  auto level = content::ZoomFactorToZoomLevel(factor);
+  SetZoomLevel(level);
+}
+
+double WebContents::GetZoomFactor() {
+  auto level = GetZoomLevel();
+  return content::ZoomLevelToZoomFactor(level);
+}
+
+void WebContents::OnSetTemporaryZoomLevel(double level,
+                                          IPC::Message* reply_msg) {
+  zoom_controller_->SetTemporaryZoomLevel(level);
+  double new_level = zoom_controller_->GetZoomLevel();
+  AtomViewHostMsg_SetTemporaryZoomLevel::WriteReplyParams(reply_msg, new_level);
+  Send(reply_msg);
+}
+
+void WebContents::OnGetZoomLevel(IPC::Message* reply_msg) {
+  AtomViewHostMsg_GetZoomLevel::WriteReplyParams(reply_msg, GetZoomLevel());
+  Send(reply_msg);
+}
+
 v8::Local<v8::Value> WebContents::GetWebPreferences(v8::Isolate* isolate) {
   WebContentsPreferences* web_preferences =
       WebContentsPreferences::FromWebContents(web_contents());
@@ -1608,6 +1668,10 @@ void WebContents::BuildPrototype(v8::Isolate* isolate,
       .SetMethod("setFrameRate", &WebContents::SetFrameRate)
       .SetMethod("getFrameRate", &WebContents::GetFrameRate)
       .SetMethod("invalidate", &WebContents::Invalidate)
+      .SetMethod("setZoomLevel", &WebContents::SetZoomLevel)
+      .SetMethod("getZoomLevel", &WebContents::GetZoomLevel)
+      .SetMethod("setZoomFactor", &WebContents::SetZoomFactor)
+      .SetMethod("getZoomFactor", &WebContents::GetZoomFactor)
       .SetMethod("getType", &WebContents::GetType)
       .SetMethod("getWebPreferences", &WebContents::GetWebPreferences)
       .SetMethod("getOwnerBrowserWindow", &WebContents::GetOwnerBrowserWindow)

@@ -9,6 +9,8 @@ const {closeWindow} = require('./window-helpers')
 
 const {app, BrowserWindow, ipcMain} = remote
 
+const isCI = remote.getGlobal('isCi')
+
 describe('electron module', function () {
   it('does not expose internal modules to require', function () {
     assert.throws(function () {
@@ -313,12 +315,20 @@ describe('app module', function () {
   describe('app.get/setLoginItemSettings API', function () {
     if (process.platform === 'linux') return
 
+    const updateExe = path.resolve(path.dirname(process.execPath), '..', 'Update.exe')
+    const processStartArgs = [
+      '--processStart', `"${path.basename(process.execPath)}"`,
+      '--process-start-args', `"--hidden"`
+    ]
+
     beforeEach(function () {
       app.setLoginItemSettings({openAtLogin: false})
+      app.setLoginItemSettings({openAtLogin: false, path: updateExe, args: processStartArgs})
     })
 
     afterEach(function () {
       app.setLoginItemSettings({openAtLogin: false})
+      app.setLoginItemSettings({openAtLogin: false, path: updateExe, args: processStartArgs})
     })
 
     it('returns the login item status of the app', function () {
@@ -348,6 +358,15 @@ describe('app module', function () {
         wasOpenedAsHidden: false,
         restoreState: false
       })
+    })
+
+    it('allows you to pass a custom executable and arguments', () => {
+      if (process.platform !== 'win32') return
+
+      app.setLoginItemSettings({openAtLogin: true, path: updateExe, args: processStartArgs})
+
+      assert.equal(app.getLoginItemSettings().openAtLogin, false)
+      assert.equal(app.getLoginItemSettings({path: updateExe, args: processStartArgs}).openAtLogin, true)
     })
   })
 
@@ -437,6 +456,71 @@ describe('app module', function () {
       app.setAsDefaultProtocolClient(protocol, updateExe, processStartArgs)
       assert.equal(app.isDefaultProtocolClient(protocol, updateExe, processStartArgs), true)
       assert.equal(app.isDefaultProtocolClient(protocol), false)
+    })
+  })
+
+  describe('getFileIcon() API', function () {
+    // FIXME Get these specs running on Linux CI
+    if (process.platform === 'linux' && isCI) return
+
+    const iconPath = path.join(__dirname, 'fixtures/assets/icon.ico')
+    const sizes = {
+      small: 16,
+      normal: 32,
+      large: process.platform === 'win32' ? 32 : 48
+    }
+
+    it('fetches a non-empty icon', function (done) {
+      app.getFileIcon(iconPath, function (err, icon) {
+        assert.equal(err, null)
+        assert.equal(icon.isEmpty(), false)
+        done()
+      })
+    })
+
+    it('fetches normal icon size by default', function (done) {
+      app.getFileIcon(iconPath, function (err, icon) {
+        const size = icon.getSize()
+        assert.equal(err, null)
+        assert.equal(size.height, sizes.normal)
+        assert.equal(size.width, sizes.normal)
+        done()
+      })
+    })
+
+    describe('size option', function () {
+      it('fetches a small icon', function (done) {
+        app.getFileIcon(iconPath, { size: 'small' }, function (err, icon) {
+          const size = icon.getSize()
+          assert.equal(err, null)
+          assert.equal(size.height, sizes.small)
+          assert.equal(size.width, sizes.small)
+          done()
+        })
+      })
+
+      it('fetches a normal icon', function (done) {
+        app.getFileIcon(iconPath, { size: 'normal' }, function (err, icon) {
+          const size = icon.getSize()
+          assert.equal(err, null)
+          assert.equal(size.height, sizes.normal)
+          assert.equal(size.width, sizes.normal)
+          done()
+        })
+      })
+
+      it('fetches a large icon', function (done) {
+        // macOS does not support large icons
+        if (process.platform === 'darwin') return done()
+
+        app.getFileIcon(iconPath, { size: 'large' }, function (err, icon) {
+          const size = icon.getSize()
+          assert.equal(err, null)
+          assert.equal(size.height, sizes.large)
+          assert.equal(size.width, sizes.large)
+          done()
+        })
+      })
     })
   })
 })

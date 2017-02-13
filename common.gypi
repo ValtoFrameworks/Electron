@@ -129,6 +129,9 @@
       }],
       ['_target_name=="node"', {
         'include_dirs': [
+          '<(libchromiumcontent_src_dir)',
+          '<(libchromiumcontent_src_dir)/third_party/icu/source/common',
+          '<(libchromiumcontent_src_dir)/third_party/icu/source/i18n',
           '<(libchromiumcontent_src_dir)/v8',
           '<(libchromiumcontent_src_dir)/v8/include',
         ],
@@ -154,53 +157,6 @@
               # Needed by V8.
               '-ldbghelp.lib',
               '-lshlwapi.lib',
-            ],
-            # Fix the linking error with icu.
-            'conditions': [
-              ['libchromiumcontent_component==0', {
-                'variables': {
-                  'conditions': [
-                    ['target_arch=="ia32"', {
-                      'reference_symbols': [
-                        '_u_errorName_56',
-                        '_ubidi_setPara_56',
-                        '_ucsdet_getName_56',
-                        '_uidna_openUTS46_56',
-                        '_ulocdata_close_56',
-                        '_unorm_normalize_56',
-                        '_uregex_matches_56',
-                        '_uscript_getCode_56',
-                        '_uspoof_open_56',
-                        '_usearch_setPattern_56',
-                        '?createInstance@Transliterator@icu_56@@SAPAV12@ABVUnicodeString@2@W4UTransDirection@@AAW4UErrorCode@@@Z',
-                        '??0MeasureFormat@icu_56@@QAE@ABVLocale@1@W4UMeasureFormatWidth@@AAW4UErrorCode@@@Z',
-                      ],
-                    }, {
-                      'reference_symbols': [
-                        'u_errorName_56',
-                        'ubidi_setPara_56',
-                        'ucsdet_getName_56',
-                        'uidna_openUTS46_56',
-                        'ulocdata_close_56',
-                        'unorm_normalize_56',
-                        'uregex_matches_56',
-                        'uspoof_open_56',
-                        'usearch_setPattern_56',
-                        '?createInstance@Transliterator@icu_56@@SAPEAV12@AEBVUnicodeString@2@W4UTransDirection@@AEAW4UErrorCode@@@Z',
-                        '??0MeasureFormat@icu_56@@QEAA@AEBVLocale@1@W4UMeasureFormatWidth@@AEAW4UErrorCode@@@Z',
-                      ],
-                    }],
-                  ],
-                },
-                'msvs_settings': {
-                  'VCLinkerTool': {
-                    # There is nothing like "whole-archive" on Windows, so we
-                    # have to manually force some objets files to be included
-                    # by referencing them.
-                    'ForceSymbolReferences': [ '<@(reference_symbols)' ],  # '/INCLUDE'
-                  },
-                },
-              }],
             ],
           }],
           ['OS=="linux" and libchromiumcontent_component==0', {
@@ -277,6 +233,7 @@
     'msvs_disabled_warnings': [
       4005,  # (node.h) macro redefinition
       4091,  # (node_extern.h) '__declspec(dllimport)' : ignored on left of 'node::Environment' when no variable is declared
+      4099,  # (pdf_render_settings.h) type name first seen using 'class' now seen using 'struct'
       4189,  # local variable is initialized but not referenced
       4201,  # (uv.h) nameless struct/union
       4267,  # conversion from 'size_t' to 'int', possible loss of data

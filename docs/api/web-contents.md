@@ -157,9 +157,20 @@ requested by `window.open` or an external link like `<a target='_blank'>`.
 
 By default a new `BrowserWindow` will be created for the `url`.
 
-Calling `event.preventDefault()` will prevent creating new windows. In such case, the
-`event.newGuest` may be set with a reference to a `BrowserWindow` instance to make it
-used by the Electron's runtime.
+Calling `event.preventDefault()` will prevent Electron from automatically creating a
+new `BrowserWindow`. If you call `event.preventDefault()` and manually create a new
+`BrowserWindow` then you must set `event.newGuest` to reference the new `BrowserWindow`
+instance, failing to do so may result in unexpected behavior. For example:
+
+```javascript
+myBrowserWindow.webContents.on('new-window', (event, url) => {
+  event.preventDefault()
+  const win = new BrowserWindow({show: false})
+  win.once('ready-to-show', () => win.show())
+  win.loadURL(url)
+  event.newGuest = win
+})
+```
 
 #### Event: 'will-navigate'
 
@@ -501,6 +512,24 @@ win.loadURL('http://github.com')
 #### Event: 'devtools-reload-page'
 
 Emitted when the devtools window instructs the webContents to reload
+
+#### Event: 'will-attach-webview'
+
+Returns:
+
+* `event` Event
+* `webPreferences` Object - The web preferences that will be used by the guest
+  page. This object can be modified to adjust the preferences for the guest
+  page.
+* `params` Object - The other `<webview>` parameters such as the `src` URL.
+  This object can be modified to adjust the parameters of the guest page.
+
+Emitted when a `<webview>`'s web contents is being attached to this web
+contents. Calling `event.preventDefault()` will destroy the guest page.
+
+This event can be used to configure `webPreferences` for the `webContents`
+of a `<webview>` before it's loaded, and provides the ability to set settings
+that can't be set via `<webview>` attributes.
 
 ### Instance Methods
 
@@ -1151,7 +1180,7 @@ the cursor when dragging.
 * `callback` Function - `(error) => {}`.
   * `error` Error
 
-Returns true if the process of saving page has been initiated successfully.
+Returns `Boolean` - true if the process of saving page has been initiated successfully.
 
 ```javascript
 const {BrowserWindow} = require('electron')
