@@ -171,7 +171,7 @@ describe('<webview> tag', function () {
   describe('preload attribute', function () {
     it('loads the script before other scripts in window', function (done) {
       var listener = function (e) {
-        assert.equal(e.message, 'function object object')
+        assert.equal(e.message, 'function object object function')
         webview.removeEventListener('console-message', listener)
         done()
       }
@@ -181,9 +181,9 @@ describe('<webview> tag', function () {
       document.body.appendChild(webview)
     })
 
-    it('preload script can still use "process" in required modules when nodeintegration is off', function (done) {
+    it('preload script can still use "process" and "Buffer" in required modules when nodeintegration is off', function (done) {
       webview.addEventListener('console-message', function (e) {
-        assert.equal(e.message, 'object undefined object')
+        assert.equal(e.message, 'object undefined object function')
         done()
       })
       webview.setAttribute('preload', fixtures + '/module/preload-node-off.js')
@@ -212,7 +212,7 @@ describe('<webview> tag', function () {
 
     it('works without script tag in page', function (done) {
       var listener = function (e) {
-        assert.equal(e.message, 'function object object')
+        assert.equal(e.message, 'function object object function')
         webview.removeEventListener('console-message', listener)
         done()
       }
@@ -224,7 +224,7 @@ describe('<webview> tag', function () {
 
     it('resolves relative URLs', function (done) {
       var listener = function (e) {
-        assert.equal(e.message, 'function object object')
+        assert.equal(e.message, 'function object object function')
         webview.removeEventListener('console-message', listener)
         done()
       }
@@ -318,7 +318,7 @@ describe('<webview> tag', function () {
 
     it('does not break preload script', function (done) {
       var listener = function (e) {
-        assert.equal(e.message, 'function object object')
+        assert.equal(e.message, 'function object object function')
         webview.removeEventListener('console-message', listener)
         done()
       }
@@ -523,8 +523,11 @@ describe('<webview> tag', function () {
     it('emits when favicon urls are received', function (done) {
       webview.addEventListener('page-favicon-updated', function (e) {
         assert.equal(e.favicons.length, 2)
-        var pageUrl = process.platform === 'win32' ? 'file:///C:/favicon.png' : 'file:///favicon.png'
-        assert.equal(e.favicons[0], pageUrl)
+        if (process.platform === 'win32') {
+          assert(/^file:\/\/\/[A-Z]:\/favicon.png$/i.test(e.favicons[0]))
+        } else {
+          assert.equal(e.favicons[0], 'file:///favicon.png')
+        }
         done()
       })
       webview.src = 'file://' + fixtures + '/pages/a.html'
@@ -1064,21 +1067,6 @@ describe('<webview> tag', function () {
     })
   })
 
-  it('inherits the zoomFactor of the parent window', function (done) {
-    w = new BrowserWindow({
-      show: false,
-      webPreferences: {
-        zoomFactor: 1.2
-      }
-    })
-    ipcMain.once('pong', function (event, zoomFactor, zoomLevel) {
-      assert.equal(zoomFactor, 1.2)
-      assert.equal(zoomLevel, 1)
-      done()
-    })
-    w.loadURL('file://' + fixtures + '/pages/webview-zoom-factor.html')
-  })
-
   it('inherits the parent window visibility state and receives visibilitychange events', function (done) {
     w = new BrowserWindow({
       show: false
@@ -1535,6 +1523,73 @@ describe('<webview> tag', function () {
           }
         }
       })
+    })
+  })
+
+  describe('zoom behavior', () => {
+    const zoomScheme = remote.getGlobal('zoomScheme')
+    const webviewSession = session.fromPartition('webview-temp')
+
+    before((done) => {
+      const protocol = webviewSession.protocol
+      protocol.registerStringProtocol(zoomScheme, (request, callback) => {
+        callback('hello')
+      }, (error) => done(error))
+    })
+
+    after((done) => {
+      const protocol = webviewSession.protocol
+      protocol.unregisterProtocol(zoomScheme, (error) => done(error))
+    })
+
+    it('inherits the zoomFactor of the parent window', (done) => {
+      w = new BrowserWindow({
+        show: false,
+        webPreferences: {
+          zoomFactor: 1.2
+        }
+      })
+      ipcMain.once('webview-parent-zoom-level', (event, zoomFactor, zoomLevel) => {
+        assert.equal(zoomFactor, 1.2)
+        assert.equal(zoomLevel, 1)
+        done()
+      })
+      w.loadURL(`file://${fixtures}/pages/webview-zoom-factor.html`)
+    })
+
+    it('maintains zoom level on navigation', (done) => {
+      w = new BrowserWindow({
+        show: false,
+        webPreferences: {
+          zoomFactor: 1.2
+        }
+      })
+      ipcMain.on('webview-zoom-level', (event, zoomLevel, zoomFactor, newHost, final) => {
+        if (!newHost) {
+          assert.equal(zoomFactor, 1.44)
+          assert.equal(zoomLevel, 2.0)
+        } else {
+          assert.equal(zoomFactor, 1.2)
+          assert.equal(zoomLevel, 1)
+        }
+        if (final) done()
+      })
+      w.loadURL(`file://${fixtures}/pages/webview-custom-zoom-level.html`)
+    })
+
+    it('maintains zoom level when navigating within same page', (done) => {
+      w = new BrowserWindow({
+        show: false,
+        webPreferences: {
+          zoomFactor: 1.2
+        }
+      })
+      ipcMain.on('webview-zoom-in-page', (event, zoomLevel, zoomFactor, final) => {
+        assert.equal(zoomFactor, 1.44)
+        assert.equal(zoomLevel, 2.0)
+        if (final) done()
+      })
+      w.loadURL(`file://${fixtures}/pages/webview-in-page-navigate.html`)
     })
   })
 })

@@ -20,10 +20,10 @@ namespace atom {
 
 WebContentsZoomController::WebContentsZoomController(
     content::WebContents* web_contents)
-    : old_process_id_(-1),
+    : content::WebContentsObserver(web_contents),
+      old_process_id_(-1),
       old_view_id_(-1),
-      embedder_zoom_controller_(nullptr),
-      content::WebContentsObserver(web_contents) {
+      embedder_zoom_controller_(nullptr) {
   default_zoom_factor_ = content::kEpsilon;
   host_zoom_map_ = content::HostZoomMap::GetForWebContents(web_contents);
   zoom_subscription_ = host_zoom_map_->AddZoomLevelChangedCallback(base::Bind(
@@ -112,8 +112,7 @@ void WebContentsZoomController::DidFinishNavigation(
     return;
   }
 
-  if (!navigation_handle->IsSamePage())
-    SetZoomFactorOnNavigationIfNeeded(navigation_handle->GetURL());
+  SetZoomFactorOnNavigationIfNeeded(navigation_handle->GetURL());
 }
 
 void WebContentsZoomController::WebContentsDestroyed() {

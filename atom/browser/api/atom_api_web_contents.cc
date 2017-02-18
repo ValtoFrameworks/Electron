@@ -1500,13 +1500,16 @@ int WebContents::GetFrameRate() const {
 }
 
 void WebContents::Invalidate() {
-  if (!IsOffScreen())
-    return;
-
-  auto* osr_rwhv = static_cast<OffScreenRenderWidgetHostView*>(
+  if (IsOffScreen()) {
+    auto* osr_rwhv = static_cast<OffScreenRenderWidgetHostView*>(
       web_contents()->GetRenderWidgetHostView());
-  if (osr_rwhv)
-    osr_rwhv->Invalidate();
+    if (osr_rwhv)
+      osr_rwhv->Invalidate();
+  } else {
+    const auto window = owner_window();
+    if (window)
+      window->Invalidate();
+  }
 }
 
 void WebContents::SetZoomLevel(double level) {
@@ -1669,9 +1672,9 @@ void WebContents::BuildPrototype(v8::Isolate* isolate,
       .SetMethod("getFrameRate", &WebContents::GetFrameRate)
       .SetMethod("invalidate", &WebContents::Invalidate)
       .SetMethod("setZoomLevel", &WebContents::SetZoomLevel)
-      .SetMethod("getZoomLevel", &WebContents::GetZoomLevel)
+      .SetMethod("_getZoomLevel", &WebContents::GetZoomLevel)
       .SetMethod("setZoomFactor", &WebContents::SetZoomFactor)
-      .SetMethod("getZoomFactor", &WebContents::GetZoomFactor)
+      .SetMethod("_getZoomFactor", &WebContents::GetZoomFactor)
       .SetMethod("getType", &WebContents::GetType)
       .SetMethod("getWebPreferences", &WebContents::GetWebPreferences)
       .SetMethod("getOwnerBrowserWindow", &WebContents::GetOwnerBrowserWindow)
