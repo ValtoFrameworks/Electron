@@ -3,7 +3,7 @@ const http = require('http')
 const path = require('path')
 const ws = require('ws')
 const url = require('url')
-const {ipcRenderer, remote} = require('electron')
+const {ipcRenderer, remote, webFrame} = require('electron')
 const {closeWindow} = require('./window-helpers')
 
 const {app, BrowserWindow, ipcMain, protocol, session, webContents} = remote
@@ -21,8 +21,9 @@ describe('chromium feature', function () {
     listener = null
   })
 
-  xdescribe('heap snapshot', function () {
+  describe('heap snapshot', function () {
     it('does not crash', function () {
+      if (process.env.TRAVIS === 'true') return
       process.atomBinding('v8_util').takeHeapSnapshot()
     })
   })
@@ -589,6 +590,27 @@ describe('chromium feature', function () {
       worker.postMessage(message)
     })
 
+    it('Worker has no node integration by default', function (done) {
+      let worker = new Worker('../fixtures/workers/worker_node.js')
+      worker.onmessage = function (event) {
+        assert.equal(event.data, 'undefined undefined undefined undefined')
+        worker.terminate()
+        done()
+      }
+    })
+
+    it('Worker has node integration with nodeIntegrationInWorker', function (done) {
+      let webview = new WebView()
+      webview.addEventListener('ipc-message', function (e) {
+        assert.equal(e.channel, 'object function object function')
+        webview.remove()
+        done()
+      })
+      webview.src = 'file://' + fixtures + '/pages/worker.html'
+      webview.setAttribute('webpreferences', 'nodeIntegration, nodeIntegrationInWorker')
+      document.body.appendChild(webview)
+    })
+
     it('SharedWorker can work', function (done) {
       var worker = new SharedWorker('../fixtures/workers/shared_worker.js')
       var message = 'ping'
@@ -597,6 +619,29 @@ describe('chromium feature', function () {
         done()
       }
       worker.port.postMessage(message)
+    })
+
+    it('SharedWorker has no node integration by default', function (done) {
+      let worker = new SharedWorker('../fixtures/workers/shared_worker_node.js')
+      worker.port.onmessage = function (event) {
+        assert.equal(event.data, 'undefined undefined undefined undefined')
+        done()
+      }
+    })
+
+    it('SharedWorker has node integration with nodeIntegrationInWorker', function (done) {
+      let webview = new WebView()
+      webview.addEventListener('console-message', function (e) {
+        console.log(e)
+      })
+      webview.addEventListener('ipc-message', function (e) {
+        assert.equal(e.channel, 'object function object function')
+        webview.remove()
+        done()
+      })
+      webview.src = 'file://' + fixtures + '/pages/shared_worker.html'
+      webview.setAttribute('webpreferences', 'nodeIntegration, nodeIntegrationInWorker')
+      document.body.appendChild(webview)
     })
   })
 
@@ -799,6 +844,66 @@ describe('chromium feature', function () {
         }).catch(function (e) {
           done(e)
         })
+      })
+    })
+  })
+
+  describe('PDF Viewer', function () {
+    let w = null
+    const pdfSource = url.format({
+      pathname: path.join(fixtures, 'assets', 'cat.pdf').replace(/\\/g, '/'),
+      protocol: 'file',
+      slashes: true
+    })
+
+    beforeEach(function () {
+      w = new BrowserWindow({
+        show: false,
+        webPreferences: {
+          preload: path.join(fixtures, 'module', 'preload-inject-ipc.js')
+        }
+      })
+    })
+
+    afterEach(function () {
+      return closeWindow(w).then(function () { w = null })
+    })
+
+    it('opens when loading a pdf resource as top level navigation', function (done) {
+      ipcMain.once('pdf-loaded', function (event, success) {
+        if (success) done()
+      })
+      w.webContents.on('page-title-updated', function () {
+        const source = `
+          if (window.viewer) {
+            window.viewer.setLoadCallback(function(success) {
+              window.ipcRenderer.send('pdf-loaded', success);
+            });
+          }
+        `
+        const parsedURL = url.parse(w.webContents.getURL(), true)
+        assert.equal(parsedURL.protocol, 'chrome:')
+        assert.equal(parsedURL.hostname, 'pdf-viewer')
+        assert.equal(parsedURL.query.src, pdfSource)
+        assert.equal(w.webContents.getTitle(), 'cat.pdf')
+        w.webContents.executeJavaScript(source)
+      })
+      w.webContents.loadURL(pdfSource)
+    })
+
+    it('should not open when pdf is requested as sub resource', function (done) {
+      webFrame.registerURLSchemeAsPrivileged('file', {
+        secure: false,
+        bypassCSP: false,
+        allowServiceWorkers: false,
+        corsEnabled: false
+      })
+      fetch(pdfSource).then(function (res) {
+        assert.equal(res.status, 200)
+        assert.notEqual(document.title, 'cat.pdf')
+        done()
+      }).catch(function (e) {
+        done(e)
       })
     })
   })

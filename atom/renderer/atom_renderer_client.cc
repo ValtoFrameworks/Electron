@@ -12,6 +12,8 @@
 #include "atom/common/api/api_messages.h"
 #include "atom/common/api/atom_bindings.h"
 #include "atom/common/api/event_emitter_caller.h"
+#include "atom/common/asar/asar_util.h"
+#include "atom/common/atom_constants.h"
 #include "atom/common/color_util.h"
 #include "atom/common/native_mate_converters/value_converter.h"
 #include "atom/common/node_bindings.h"
@@ -22,6 +24,7 @@
 #include "atom/renderer/guest_view_container.h"
 #include "atom/renderer/node_array_buffer_bridge.h"
 #include "atom/renderer/preferences_manager.h"
+#include "atom/renderer/web_worker_observer.h"
 #include "base/command_line.h"
 #include "chrome/renderer/media/chrome_key_systems.h"
 #include "chrome/renderer/pepper/pepper_helper.h"
@@ -214,8 +217,8 @@ std::vector<std::string> ParseSchemesCLISwitch(const char* switch_name) {
 
 AtomRendererClient::AtomRendererClient()
     : node_integration_initialized_(false),
-      node_bindings_(NodeBindings::Create(false)),
-      atom_bindings_(new AtomBindings) {
+      node_bindings_(NodeBindings::Create(NodeBindings::RENDERER)),
+      atom_bindings_(new AtomBindings(uv_default_loop())) {
   isolated_world_ = base::CommandLine::ForCurrentProcess()->HasSwitch(
       switches::kContextIsolation);
   // Parse --standard-schemes=scheme1,scheme2
@@ -226,6 +229,7 @@ AtomRendererClient::AtomRendererClient()
 }
 
 AtomRendererClient::~AtomRendererClient() {
+  asar::ClearArchives();
 }
 
 void AtomRendererClient::RenderThreadStarted() {
@@ -273,6 +277,10 @@ void AtomRendererClient::RenderFrameCreated(
 
   // This is required for widevine plugin detection provided during runtime.
   blink::resetPluginCache();
+
+  // Allow access to file scheme from pdf viewer.
+  blink::WebSecurityPolicy::addOriginAccessWhitelistEntry(
+      GURL(kPdfViewerUIOrigin), "file", "", true);
 
   // Parse --secure-schemes=scheme1,scheme2
   std::vector<std::string> secure_schemes_list =
@@ -339,6 +347,7 @@ bool AtomRendererClient::OverrideCreatePlugin(
     blink::WebPlugin** plugin) {
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   if (params.mimeType.utf8() == content::kBrowserPluginMimeType ||
+      params.mimeType.utf8() == kPdfPluginMimeType ||
       command_line->HasSwitch(switches::kEnablePlugins))
     return false;
 
@@ -428,6 +437,22 @@ content::BrowserPluginDelegate* AtomRendererClient::CreateBrowserPluginDelegate(
 void AtomRendererClient::AddSupportedKeySystems(
     std::vector<std::unique_ptr<::media::KeySystemProperties>>* key_systems) {
   AddChromeKeySystems(key_systems);
+}
+
+void AtomRendererClient::DidInitializeWorkerContextOnWorkerThread(
+    v8::Local<v8::Context> context) {
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kNodeIntegrationInWorker)) {
+    WebWorkerObserver::GetCurrent()->ContextCreated(context);
+  }
+}
+
+void AtomRendererClient::WillDestroyWorkerContextOnWorkerThread(
+    v8::Local<v8::Context> context) {
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kNodeIntegrationInWorker)) {
+    WebWorkerObserver::GetCurrent()->ContextWillDestroy(context);
+  }
 }
 
 v8::Local<v8::Context> AtomRendererClient::GetContext(
