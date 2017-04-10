@@ -336,6 +336,19 @@ bool ScopedDisableResize::disable_resize_ = false;
 
 @end
 
+#if !defined(MAC_OS_X_VERSION_10_12)
+
+enum {
+  NSWindowTabbingModeDisallowed = 2
+};
+
+@interface NSWindow (SierraSDK)
+- (void)setTabbingMode:(NSInteger)mode;
+- (void)setTabbingIdentifier:(NSString*)identifier;
+@end
+
+#endif  // MAC_OS_X_VERSION_10_12
+
 @interface AtomNSWindow : EventDispatchingWindow<QLPreviewPanelDataSource, QLPreviewPanelDelegate, NSTouchBarDelegate> {
  @private
   atom::NativeWindowMac* shell_;
@@ -355,6 +368,7 @@ bool ScopedDisableResize::disable_resize_ = false;
 - (void)enableWindowButtonsOffset;
 - (void)resetTouchBar:(const std::vector<mate::PersistentDictionary>&)settings;
 - (void)refreshTouchBarItem:(const std::string&)item_id;
+- (void)setEscapeTouchBarItem:(const mate::PersistentDictionary&)item;
 
 @end
 
@@ -395,6 +409,11 @@ bool ScopedDisableResize::disable_resize_ = false;
     return [atom_touch_bar_ makeItemForIdentifier:identifier];
   else
     return nil;
+}
+
+- (void)setEscapeTouchBarItem:(const mate::PersistentDictionary&)item {
+  if (atom_touch_bar_ && self.touchBar)
+    [atom_touch_bar_ setEscapeTouchBarItem:item forTouchBar:self.touchBar];
 }
 
 // NSWindow overrides.
@@ -682,6 +701,9 @@ NativeWindowMac::NativeWindowMac(
 
   options.Get(options::kTitleBarStyle, &title_bar_style_);
 
+  std::string tabbingIdentifier;
+  options.Get(options::kTabbingIdentifier, &tabbingIdentifier);
+
   std::string windowType;
   options.Get(options::kType, &windowType);
 
@@ -752,6 +774,18 @@ NativeWindowMac::NativeWindowMac(
     }
     // Remove non-transparent corners, see http://git.io/vfonD.
     [window_ setOpaque:NO];
+  }
+
+  // Create a tab only if tabbing identifier is specified and window has
+  // a native title bar.
+  if (tabbingIdentifier.empty() || transparent() || !has_frame()) {
+    if ([window_ respondsToSelector:@selector(tabbingMode)]) {
+      [window_ setTabbingMode:NSWindowTabbingModeDisallowed];
+    }
+  } else {
+    if ([window_ respondsToSelector:@selector(tabbingIdentifier)]) {
+      [window_ setTabbingIdentifier:base::SysUTF8ToNSString(tabbingIdentifier)];
+    }
   }
 
   // We will manage window's lifetime ourselves.
@@ -1262,7 +1296,7 @@ void NativeWindowMac::SetProgressBar(double progress, const NativeWindow::Progre
   NSDockTile* dock_tile = [NSApp dockTile];
 
   // For the first time API invoked, we need to create a ContentView in DockTile.
-  if (dock_tile.contentView == NULL) {
+  if (dock_tile.contentView == nullptr) {
     NSImageView* image_view = [[NSImageView alloc] init];
     [image_view setImage:[NSApp applicationIconImage]];
     [dock_tile setContentView:image_view];
@@ -1358,22 +1392,22 @@ void NativeWindowMac::SetVibrancy(const std::string& type) {
     // they are available in the minimum SDK version
     if (type == "selection") {
       // NSVisualEffectMaterialSelection
-      vibrancyType = (NSVisualEffectMaterial) 4;
+      vibrancyType = static_cast<NSVisualEffectMaterial>(4);
     } else if (type == "menu") {
       // NSVisualEffectMaterialMenu
-      vibrancyType = (NSVisualEffectMaterial) 5;
+      vibrancyType = static_cast<NSVisualEffectMaterial>(5);
     } else if (type == "popover") {
       // NSVisualEffectMaterialPopover
-      vibrancyType = (NSVisualEffectMaterial) 6;
+      vibrancyType = static_cast<NSVisualEffectMaterial>(6);
     } else if (type == "sidebar") {
       // NSVisualEffectMaterialSidebar
-      vibrancyType = (NSVisualEffectMaterial) 7;
+      vibrancyType = static_cast<NSVisualEffectMaterial>(7);
     } else if (type == "medium-light") {
       // NSVisualEffectMaterialMediumLight
-      vibrancyType = (NSVisualEffectMaterial) 8;
+      vibrancyType = static_cast<NSVisualEffectMaterial>(8);
     } else if (type == "ultra-dark") {
       // NSVisualEffectMaterialUltraDark
-      vibrancyType = (NSVisualEffectMaterial) 9;
+      vibrancyType = static_cast<NSVisualEffectMaterial>(9);
     }
   }
 
@@ -1387,6 +1421,10 @@ void NativeWindowMac::SetTouchBar(
 
 void NativeWindowMac::RefreshTouchBarItem(const std::string& item_id) {
   [window_ refreshTouchBarItem:item_id];
+}
+
+void NativeWindowMac::SetEscapeTouchBarItem(const mate::PersistentDictionary& item) {
+  [window_ setEscapeTouchBarItem:item];
 }
 
 void NativeWindowMac::OnInputEvent(const blink::WebInputEvent& event) {
