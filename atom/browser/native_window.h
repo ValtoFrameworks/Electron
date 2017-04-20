@@ -47,6 +47,8 @@ class Dictionary;
 
 namespace atom {
 
+class NativeBrowserView;
+
 struct DraggableRegion;
 
 class NativeWindow : public base::SupportsUserData,
@@ -144,6 +146,7 @@ class NativeWindow : public base::SupportsUserData,
   virtual void SetFocusable(bool focusable);
   virtual void SetMenu(AtomMenuModel* menu);
   virtual void SetParentWindow(NativeWindow* parent);
+  virtual void SetBrowserView(NativeBrowserView* browser_view) = 0;
   virtual gfx::NativeWindow GetNativeWindow() = 0;
   virtual gfx::AcceleratedWidget GetAcceleratedWidget() = 0;
 
@@ -230,6 +233,8 @@ class NativeWindow : public base::SupportsUserData,
   void NotifyWindowScrollTouchEnd();
   void NotifyWindowScrollTouchEdge();
   void NotifyWindowSwipe(const std::string& direction);
+  void NotifyWindowSheetBegin();
+  void NotifyWindowSheetEnd();
   void NotifyWindowEnterFullScreen();
   void NotifyWindowLeaveFullScreen();
   void NotifyWindowEnterHtmlFullScreen();

@@ -498,6 +498,14 @@ Returns:
 
 Emitted on 3-finger swipe. Possible directions are `up`, `right`, `down`, `left`.
 
+#### Event: 'sheet-begin' _macOS_
+
+Emitted when the window opens a sheet.
+
+#### Event: 'sheet-end' _macOS_
+
+Emitted when the window has closed a sheet.
+
 ### Static Methods
 
 The `BrowserWindow` class has the following static methods:
@@ -1287,6 +1295,13 @@ Sets the touchBar layout for the current window. Specifying `null` or
 machine has a touch bar and is running on macOS 10.12.1+.
 
 **Note:** The TouchBar API is currently experimental and may change or be
+removed in future Electron releases.
+
+#### `win.setBrowserView(browserView)` _Experimental_
+
+* `browserView` [BrowserView](browser-view.md)
+
+**Note:** The BrowserView API is currently experimental and may change or be
 removed in future Electron releases.
 
 [blink-feature-string]: https://cs.chromium.org/chromium/src/third_party/WebKit/Source/platform/RuntimeEnabledFeatures.json5?l=62

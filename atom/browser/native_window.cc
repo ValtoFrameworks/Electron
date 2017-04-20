@@ -104,8 +104,7 @@ NativeWindow::~NativeWindow() {
 // static
 NativeWindow* NativeWindow::FromWebContents(
     content::WebContents* web_contents) {
-  WindowList& window_list = *WindowList::GetInstance();
-  for (NativeWindow* window : window_list) {
+  for (const auto& window : WindowList::GetWindows()) {
     if (window->web_contents() == web_contents)
       return window;
   }
@@ -553,6 +552,16 @@ void NativeWindow::NotifyWindowScrollTouchEdge() {
 void NativeWindow::NotifyWindowSwipe(const std::string& direction) {
   for (NativeWindowObserver& observer : observers_)
     observer.OnWindowSwipe(direction);
+}
+
+void NativeWindow::NotifyWindowSheetBegin() {
+  for (NativeWindowObserver& observer : observers_)
+    observer.OnWindowSheetBegin();
+}
+
+void NativeWindow::NotifyWindowSheetEnd() {
+  for (NativeWindowObserver& observer : observers_)
+    observer.OnWindowSheetEnd();
 }
 
 void NativeWindow::NotifyWindowLeaveFullScreen() {
