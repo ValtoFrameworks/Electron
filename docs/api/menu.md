@@ -28,6 +28,10 @@ effect on macOS.
 
 Returns `Menu` - The application menu, if set, or `null`, if not set.
 
+**Note:** The returned `Menu` instance doesn't support dynamic addition or
+removal of menu items. [Instance properties](#instance-properties) can still
+be dynamically modified.
+
 #### `Menu.sendActionToFirstResponder(action)` _macOS_
 
 * `action` String
@@ -237,7 +241,7 @@ Linux. Here are some notes on making your app's menu more native-like.
 
 On macOS there are many system-defined standard menus, like the `Services` and
 `Windows` menus. To make your menu a standard menu, you should set your menu's
-`role` to one of following and Electron will recognize them and make them
+`role` to one of the following and Electron will recognize them and make them
 become standard menus:
 
 * `window`
