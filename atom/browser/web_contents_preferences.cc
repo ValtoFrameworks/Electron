@@ -101,11 +101,20 @@ void WebContentsPreferences::AppendExtraCommandLineSwitches(
   if (web_preferences.GetBoolean(options::kNodeIntegrationInWorker, &b) && b)
     command_line->AppendSwitch(switches::kNodeIntegrationInWorker);
 
+  // Check if webview tag creation is enabled, default to nodeIntegration value.
+  // TODO(kevinsawicki): Default to false in 2.0
+  bool webview_tag = node_integration;
+  web_preferences.GetBoolean(options::kWebviewTag, &webview_tag);
+  command_line->AppendSwitchASCII(switches::kWebviewTag,
+                                  webview_tag ? "true" : "false");
+
   // If the `sandbox` option was passed to the BrowserWindow's webPreferences,
   // pass `--enable-sandbox` to the renderer so it won't have any node.js
   // integration.
   if (IsSandboxed(web_contents))
     command_line->AppendSwitch(switches::kEnableSandbox);
+  if (web_preferences.GetBoolean("nativeWindowOpen", &b) && b)
+    command_line->AppendSwitch(switches::kNativeWindowOpen);
 
   // The preload script.
   base::FilePath::StringType preload;
@@ -197,7 +206,9 @@ void WebContentsPreferences::AppendExtraCommandLineSwitches(
   }
 }
 
-bool WebContentsPreferences::IsSandboxed(content::WebContents* web_contents) {
+bool WebContentsPreferences::IsPreferenceEnabled(
+    const std::string& attribute_name,
+    content::WebContents* web_contents) {
   WebContentsPreferences* self;
   if (!web_contents)
     return false;
@@ -207,9 +218,28 @@ bool WebContentsPreferences::IsSandboxed(content::WebContents* web_contents) {
     return false;
 
   base::DictionaryValue& web_preferences = self->web_preferences_;
-  bool sandboxed = false;
-  web_preferences.GetBoolean("sandbox", &sandboxed);
-  return sandboxed;
+  bool bool_value = false;
+  web_preferences.GetBoolean(attribute_name, &bool_value);
+  return bool_value;
+}
+
+bool WebContentsPreferences::IsSandboxed(content::WebContents* web_contents) {
+  return IsPreferenceEnabled("sandbox", web_contents);
+}
+
+bool WebContentsPreferences::UsesNativeWindowOpen(
+    content::WebContents* web_contents) {
+  return IsPreferenceEnabled("nativeWindowOpen", web_contents);
+}
+
+bool WebContentsPreferences::IsPluginsEnabled(
+    content::WebContents* web_contents) {
+  return IsPreferenceEnabled("plugins", web_contents);
+}
+
+bool WebContentsPreferences::DisablePopups(
+    content::WebContents* web_contents) {
+  return IsPreferenceEnabled("disablePopups", web_contents);
 }
 
 // static

@@ -89,6 +89,8 @@ if (global.isCi) {
   })
 }
 
+global.nativeModulesEnabled = process.platform !== 'win32' || process.execPath.toLowerCase().indexOf('\\out\\d\\') === -1
+
 // Register app as standard scheme.
 global.standardScheme = 'app'
 global.zoomScheme = 'zoom'
@@ -266,10 +268,22 @@ ipcMain.on('prevent-next-will-attach-webview', (event) => {
   event.sender.once('will-attach-webview', event => event.preventDefault())
 })
 
+ipcMain.on('prevent-next-will-prevent-unload', (event, id) => {
+  webContents.fromId(id).once('will-prevent-unload', event => event.preventDefault())
+})
+
 ipcMain.on('disable-node-on-next-will-attach-webview', (event, id) => {
   event.sender.once('will-attach-webview', (event, webPreferences, params) => {
     params.src = `file://${path.join(__dirname, '..', 'fixtures', 'pages', 'c.html')}`
     webPreferences.nodeIntegration = false
+  })
+})
+
+ipcMain.on('disable-preload-on-next-will-attach-webview', (event, id) => {
+  event.sender.once('will-attach-webview', (event, webPreferences, params) => {
+    params.src = `file://${path.join(__dirname, '..', 'fixtures', 'pages', 'webview-stripped-preload.html')}`
+    delete webPreferences.preload
+    delete webPreferences.preloadURL
   })
 })
 

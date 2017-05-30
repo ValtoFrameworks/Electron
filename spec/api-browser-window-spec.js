@@ -12,6 +12,7 @@ const {ipcRenderer, remote, screen} = require('electron')
 const {app, ipcMain, BrowserWindow, protocol, webContents} = remote
 
 const isCI = remote.getGlobal('isCi')
+const nativeModulesEnabled = remote.getGlobal('nativeModulesEnabled')
 
 describe('BrowserWindow module', function () {
   var fixtures = path.resolve(__dirname, 'fixtures')
@@ -854,7 +855,7 @@ describe('BrowserWindow module', function () {
     })
   })
 
-  describe('"web-preferences" option', function () {
+  describe('"webPreferences" option', function () {
     afterEach(function () {
       ipcMain.removeAllListeners('answer')
     })
@@ -1114,6 +1115,23 @@ describe('BrowserWindow module', function () {
         })
       })
 
+      it('can get printer list', function (done) {
+        w.destroy()
+        w = new BrowserWindow({
+          show: false,
+          webPreferences: {
+            sandbox: true,
+            preload: preload
+          }
+        })
+        w.loadURL('data:text/html,%3Ch1%3EHello%2C%20World!%3C%2Fh1%3E')
+        w.webContents.once('did-finish-load', function () {
+          const printers = w.webContents.getPrinters()
+          assert.equal(Array.isArray(printers), true)
+          done()
+        })
+      })
+
       it('can print to PDF', function (done) {
         w.destroy()
         w = new BrowserWindow({
@@ -1150,6 +1168,175 @@ describe('BrowserWindow module', function () {
         })
         w.loadURL('file://' + path.join(fixtures, 'pages', 'window-open.html'))
       })
+
+      it('releases memory after popup is closed', (done) => {
+        w.destroy()
+        w = new BrowserWindow({
+          show: false,
+          webPreferences: {
+            preload: preload,
+            sandbox: true
+          }
+        })
+        w.loadURL('file://' + path.join(fixtures, 'api', 'sandbox.html?allocate-memory'))
+        ipcMain.once('answer', function (event, {bytesBeforeOpen, bytesAfterOpen, bytesAfterClose}) {
+          const memoryIncreaseByOpen = bytesAfterOpen - bytesBeforeOpen
+          const memoryDecreaseByClose = bytesAfterOpen - bytesAfterClose
+          // decreased memory should be less than increased due to factors we
+          // can't control, but given the amount of memory allocated in the
+          // fixture, we can reasonably expect decrease to be at least 70% of
+          // increase
+          assert(memoryDecreaseByClose > memoryIncreaseByOpen * 0.7)
+          done()
+        })
+      })
+
+      // see #9387
+      it('properly manages remote object references after page reload', (done) => {
+        w.destroy()
+        w = new BrowserWindow({
+          show: false,
+          webPreferences: {
+            preload: preload,
+            sandbox: true
+          }
+        })
+        w.loadURL('file://' + path.join(fixtures, 'api', 'sandbox.html?reload-remote'))
+
+        ipcMain.on('get-remote-module-path', (event) => {
+          event.returnValue = path.join(fixtures, 'module', 'hello.js')
+        })
+
+        let reload = false
+        ipcMain.on('reloaded', (event) => {
+          event.returnValue = reload
+          reload = !reload
+        })
+
+        ipcMain.once('reload', (event) => {
+          event.sender.reload()
+        })
+
+        ipcMain.once('answer', (event, arg) => {
+          ipcMain.removeAllListeners('reloaded')
+          ipcMain.removeAllListeners('get-remote-module-path')
+          assert.equal(arg, 'hi')
+          done()
+        })
+      })
+
+      it('properly manages remote object references after page reload in child window', (done) => {
+        w.destroy()
+        w = new BrowserWindow({
+          show: false,
+          webPreferences: {
+            preload: preload,
+            sandbox: true
+          }
+        })
+        w.loadURL('file://' + path.join(fixtures, 'api', 'sandbox.html?reload-remote-child'))
+
+        ipcMain.on('get-remote-module-path', (event) => {
+          event.returnValue = path.join(fixtures, 'module', 'hello-child.js')
+        })
+
+        let reload = false
+        ipcMain.on('reloaded', (event) => {
+          event.returnValue = reload
+          reload = !reload
+        })
+
+        ipcMain.once('reload', (event) => {
+          event.sender.reload()
+        })
+
+        ipcMain.once('answer', (event, arg) => {
+          ipcMain.removeAllListeners('reloaded')
+          ipcMain.removeAllListeners('get-remote-module-path')
+          assert.equal(arg, 'hi child window')
+          done()
+        })
+      })
+    })
+
+    describe('nativeWindowOpen option', () => {
+      beforeEach(() => {
+        w.destroy()
+        w = new BrowserWindow({
+          show: false,
+          webPreferences: {
+            nativeWindowOpen: true
+          }
+        })
+      })
+
+      it('opens window of about:blank with cross-scripting enabled', (done) => {
+        ipcMain.once('answer', (event, content) => {
+          assert.equal(content, 'Hello')
+          done()
+        })
+        w.loadURL('file://' + path.join(fixtures, 'api', 'native-window-open-blank.html'))
+      })
+
+      it('opens window of same domain with cross-scripting enabled', (done) => {
+        ipcMain.once('answer', (event, content) => {
+          assert.equal(content, 'Hello')
+          done()
+        })
+        w.loadURL('file://' + path.join(fixtures, 'api', 'native-window-open-file.html'))
+      })
+
+      it('blocks accessing cross-origin frames', (done) => {
+        ipcMain.once('answer', (event, content) => {
+          assert.equal(content, 'Blocked a frame with origin "file://" from accessing a cross-origin frame.')
+          done()
+        })
+        w.loadURL('file://' + path.join(fixtures, 'api', 'native-window-open-cross-origin.html'))
+      })
+
+      it('opens window from <iframe> tags', (done) => {
+        ipcMain.once('answer', (event, content) => {
+          assert.equal(content, 'Hello')
+          done()
+        })
+        w.loadURL('file://' + path.join(fixtures, 'api', 'native-window-open-iframe.html'))
+      })
+
+      it('loads native addons correctly after reload', (done) => {
+        if (!nativeModulesEnabled) return done()
+
+        ipcMain.once('answer', (event, content) => {
+          assert.equal(content, 'function')
+          ipcMain.once('answer', (event, content) => {
+            assert.equal(content, 'function')
+            done()
+          })
+          w.reload()
+        })
+        w.loadURL('file://' + path.join(fixtures, 'api', 'native-window-open-native-addon.html'))
+      })
+    })
+  })
+
+  describe('nativeWindowOpen + contextIsolation options', () => {
+    beforeEach(() => {
+      w.destroy()
+      w = new BrowserWindow({
+        show: false,
+        webPreferences: {
+          nativeWindowOpen: true,
+          contextIsolation: true,
+          preload: path.join(fixtures, 'api', 'native-window-open-isolated-preload.js')
+        }
+      })
+    })
+
+    it('opens window with cross-scripting enabled from isolated context', (done) => {
+      ipcMain.once('answer', (event, content) => {
+        assert.equal(content, 'Hello')
+        done()
+      })
+      w.loadURL('file://' + path.join(fixtures, 'api', 'native-window-open-isolated.html'))
     })
   })
 
@@ -1173,6 +1360,60 @@ describe('BrowserWindow module', function () {
         done()
       })
       w.loadURL('file://' + path.join(fixtures, 'api', 'close-beforeunload-empty-string.html'))
+    })
+
+    it('emits for each close attempt', function (done) {
+      var beforeUnloadCount = 0
+      w.on('onbeforeunload', function () {
+        beforeUnloadCount++
+        if (beforeUnloadCount < 3) {
+          w.close()
+        } else if (beforeUnloadCount === 3) {
+          done()
+        }
+      })
+      w.webContents.once('did-finish-load', function () {
+        w.close()
+      })
+      w.loadURL('file://' + path.join(fixtures, 'api', 'beforeunload-false-prevent3.html'))
+    })
+
+    it('emits for each reload attempt', function (done) {
+      var beforeUnloadCount = 0
+      w.on('onbeforeunload', function () {
+        beforeUnloadCount++
+        if (beforeUnloadCount < 3) {
+          w.reload()
+        } else if (beforeUnloadCount === 3) {
+          done()
+        }
+      })
+      w.webContents.once('did-finish-load', function () {
+        w.webContents.once('did-finish-load', function () {
+          assert.fail('Reload was not prevented')
+        })
+        w.reload()
+      })
+      w.loadURL('file://' + path.join(fixtures, 'api', 'beforeunload-false-prevent3.html'))
+    })
+
+    it('emits for each navigation attempt', function (done) {
+      var beforeUnloadCount = 0
+      w.on('onbeforeunload', function () {
+        beforeUnloadCount++
+        if (beforeUnloadCount < 3) {
+          w.loadURL('about:blank')
+        } else if (beforeUnloadCount === 3) {
+          done()
+        }
+      })
+      w.webContents.once('did-finish-load', function () {
+        w.webContents.once('did-finish-load', function () {
+          assert.fail('Navigation was not prevented')
+        })
+        w.loadURL('about:blank')
+      })
+      w.loadURL('file://' + path.join(fixtures, 'api', 'beforeunload-false-prevent3.html'))
     })
   })
 
@@ -2131,6 +2372,8 @@ describe('BrowserWindow module', function () {
     beforeEach(function () {
       if (w != null) w.destroy()
       w = new BrowserWindow({
+        width: 100,
+        height: 100,
         show: false,
         webPreferences: {
           backgroundThrottling: false,
@@ -2139,9 +2382,12 @@ describe('BrowserWindow module', function () {
       })
     })
 
-    it('creates offscreen window', function (done) {
-      w.webContents.once('paint', function (event, rect, data, size) {
+    it('creates offscreen window with correct size', function (done) {
+      w.webContents.once('paint', function (event, rect, data) {
         assert.notEqual(data.length, 0)
+        let size = data.getSize()
+        assertWithinDelta(size.width, 100, 2, 'width')
+        assertWithinDelta(size.height, 100, 2, 'height')
         done()
       })
       w.loadURL('file://' + fixtures + '/api/offscreen-rendering.html')
@@ -2162,7 +2408,7 @@ describe('BrowserWindow module', function () {
 
     describe('window.webContents.isPainting()', function () {
       it('returns whether is currently painting', function (done) {
-        w.webContents.once('paint', function (event, rect, data, size) {
+        w.webContents.once('paint', function (event, rect, data) {
           assert.equal(w.webContents.isPainting(), true)
           done()
         })
@@ -2186,7 +2432,7 @@ describe('BrowserWindow module', function () {
         w.webContents.on('dom-ready', function () {
           w.webContents.stopPainting()
           w.webContents.startPainting()
-          w.webContents.once('paint', function (event, rect, data, size) {
+          w.webContents.once('paint', function (event, rect, data) {
             assert.equal(w.webContents.isPainting(), true)
             done()
           })
@@ -2197,7 +2443,7 @@ describe('BrowserWindow module', function () {
 
     describe('window.webContents.getFrameRate()', function () {
       it('has default frame rate', function (done) {
-        w.webContents.once('paint', function (event, rect, data, size) {
+        w.webContents.once('paint', function (event, rect, data) {
           assert.equal(w.webContents.getFrameRate(), 60)
           done()
         })
@@ -2209,7 +2455,7 @@ describe('BrowserWindow module', function () {
       it('sets custom frame rate', function (done) {
         w.webContents.on('dom-ready', function () {
           w.webContents.setFrameRate(30)
-          w.webContents.once('paint', function (event, rect, data, size) {
+          w.webContents.once('paint', function (event, rect, data) {
             assert.equal(w.webContents.getFrameRate(), 30)
             done()
           })

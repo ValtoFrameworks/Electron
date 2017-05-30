@@ -6,7 +6,11 @@
 
 #include <io.h>
 
+#if !defined(DEBUG)
 #define U_I18N_IMPLEMENTATION
+#define U_COMMON_IMPLEMENTATION
+#define U_COMBINED_IMPLEMENTATION
+#endif
 
 #include "third_party/icu/source/common/unicode/ubidi.h"
 #include "third_party/icu/source/common/unicode/uchar.h"
@@ -15,6 +19,7 @@
 #include "third_party/icu/source/common/unicode/unorm.h"
 #include "third_party/icu/source/common/unicode/urename.h"
 #include "third_party/icu/source/common/unicode/ustring.h"
+#include "third_party/icu/source/i18n/unicode/dtitvfmt.h"
 #include "third_party/icu/source/i18n/unicode/measfmt.h"
 #include "third_party/icu/source/i18n/unicode/translit.h"
 #include "third_party/icu/source/i18n/unicode/ucsdet.h"
@@ -60,6 +65,9 @@ void ReferenceSymbols() {
   UMeasureFormatWidth width = UMEASFMT_WIDTH_WIDE;
   UErrorCode status = U_ZERO_ERROR;
   icu::MeasureFormat format(icu::Locale::getRoot(), width, status);
+  icu::DateInterval internal(0, 0);
+  icu::DateIntervalFormat::createInstance(UnicodeString(),
+                                          icu::Locale::getRoot(), status);
   reinterpret_cast<icu::Transliterator*>(nullptr)->clone();
 }
 

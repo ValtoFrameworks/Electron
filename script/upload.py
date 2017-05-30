@@ -81,6 +81,7 @@ def main():
   if PLATFORM == 'darwin':
     upload_electron(github, release, os.path.join(DIST_DIR,
                     'electron-api.json'))
+    upload_electron(github, release, os.path.join(DIST_DIR, 'electron.d.ts'))
     upload_electron(github, release, os.path.join(DIST_DIR, DSYM_NAME))
   elif PLATFORM == 'win32':
     upload_electron(github, release, os.path.join(DIST_DIR, PDB_NAME))
@@ -101,6 +102,7 @@ def main():
     run_python_script('upload-windows-pdb.py')
 
     # Upload node headers.
+    run_python_script('create-node-headers.py', '-v', args.version)
     run_python_script('upload-node-headers.py', '-v', args.version)
 
 
@@ -180,7 +182,7 @@ def create_or_get_release_draft(github, releases, tag, tag_exists):
 
 
 def create_release_draft(github, tag):
-  name = '{0} {1}'.format(PROJECT_NAME, tag)
+  name = '{0} {1} beta'.format(PROJECT_NAME, tag)
   if os.environ.has_key('CI'):
     body = '(placeholder)'
   else:
@@ -189,7 +191,7 @@ def create_release_draft(github, tag):
     sys.stderr.write('Quit due to empty release note.\n')
     sys.exit(0)
 
-  data = dict(tag_name=tag, name=name, body=body, draft=True)
+  data = dict(tag_name=tag, name=name, body=body, draft=True, prerelease=True)
   r = github.repos(ELECTRON_REPO).releases.post(data=data)
   return r
 

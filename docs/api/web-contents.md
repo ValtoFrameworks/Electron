@@ -218,6 +218,36 @@ When in-page navigation happens, the page URL changes but does not cause
 navigation outside of the page. Examples of this occurring are when anchor links
 are clicked or when the DOM `hashchange` event is triggered.
 
+#### Event: 'will-prevent-unload'
+
+Returns:
+
+* `event` Event
+
+Emitted when a `beforeunload` event handler is attempting to cancel a page unload.
+
+Calling `event.preventDefault()` will ignore the `beforeunload` event handler
+and allow the page to be unloaded.
+
+```javascript
+const {BrowserWindow, dialog} = require('electron')
+const win = new BrowserWindow({width: 800, height: 600})
+win.webContents.on('will-prevent-unload', (event) => {
+  const choice = dialog.showMessageBox(win, {
+    type: 'question',
+    buttons: ['Leave', 'Stay'],
+    title: 'Do you want to leave this site?',
+    message: 'Changes you made may not be saved.',
+    defaultId: 0,
+    cancelId: 1
+  })
+  const leave = (choice === 0)
+  if (leave) {
+    event.preventDefault()
+  }
+})
+```
+
 #### Event: 'crashed'
 
 Returns:
@@ -528,6 +558,9 @@ This event can be used to configure `webPreferences` for the `webContents`
 of a `<webview>` before it's loaded, and provides the ability to set settings
 that can't be set via `<webview>` attributes.
 
+**Note:** The specified `preload` script option will be appear as `preloadURL`
+(not `preload`) in the `webPreferences` object emitted with this event.
+
 ### Instance Methods
 
 #### `contents.loadURL(url[, options])`
@@ -537,7 +570,7 @@ that can't be set via `<webview>` attributes.
   * `httpReferrer` String (optional) - A HTTP Referrer url.
   * `userAgent` String (optional) - A user agent originating the request.
   * `extraHeaders` String (optional) - Extra headers separated by "\n"
-  * `postData` ([UploadRawData](structures/upload-raw-data.md) | [UploadFile](structures/upload-file.md) | [UploadFileSystem](structures/upload-file-system.md) | [UploadBlob](structures/upload-blob.md))[] - (optional)
+  * `postData` ([UploadRawData[]](structures/upload-raw-data.md) | [UploadFile[]](structures/upload-file.md) | [UploadFileSystem[]](structures/upload-file-system.md) | [UploadBlob[]](structures/upload-blob.md)) - (optional)
   * `baseURLForDataURL` String (optional) - Base url (with trailing path separator) for files to be loaded by the data url. This is needed only if the specified `url` is a data url and needs to load other files.
 
 Loads the `url` in the window. The `url` must contain the protocol prefix,
@@ -886,18 +919,26 @@ Unregisters any ServiceWorker if present and returns a boolean as
 response to `callback` when the JS promise is fulfilled or false
 when the JS promise is rejected.
 
+#### `contents.getPrinters()`
+
+Get the system printer list.
+
+Returns [`PrinterInfo[]`](structures/printer-info.md)
+
 #### `contents.print([options])`
 
 * `options` Object (optional)
   * `silent` Boolean - Don't ask user for print settings. Default is `false`.
   * `printBackground` Boolean - Also prints the background color and image of
     the web page. Default is `false`.
+  * `deviceName` String (optional) - Set the printer device name to use. Default is `''`.
 
 Prints window's web page. When `silent` is set to `true`, Electron will pick
-up system's default printer and default settings for printing.
+the system's default printer if `deviceName` is empty and the default settings
+for printing.
 
 Calling `window.print()` in web page is equivalent to calling
-`webContents.print({silent: false, printBackground: false})`.
+`webContents.print({silent: false, printBackground: false, deviceName: ''})`.
 
 Use `page-break-before: always; ` CSS style to force to print to a new page.
 
@@ -1258,6 +1299,10 @@ Returns `String` - Returns the WebRTC IP Handling Policy.
 Setting the WebRTC IP handling policy allows you to control which IPs are
 exposed via WebRTC.  See [BrowserLeaks](https://browserleaks.com/webrtc) for
 more details.
+
+#### `contents.getOSProcessId()`
+
+Returns `Integer` - The `pid` of the associated renderer process.
 
 ### Instance Properties
 

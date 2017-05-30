@@ -58,6 +58,7 @@ contains documents describing how to build and contribute to Electron.
 - [Ukrainian](https://github.com/electron/electron/tree/master/docs-translations/uk-UA)
 - [Russian](https://github.com/electron/electron/tree/master/docs-translations/ru-RU)
 - [French](https://github.com/electron/electron/tree/master/docs-translations/fr-FR)
+- [Indonesian](https://github.com/electron/electron/tree/master/docs-translations/id)
 
 ## Quick Start
 
@@ -72,10 +73,11 @@ locations:
 forums
 - `#atom-shell` channel on Freenode
 - [`Atom`](http://atom-slack.herokuapp.com/) channel on Slack
+- [`electron-ru`](https://telegram.me/electron_ru) *(Russian)*
 - [`electron-br`](https://electron-br.slack.com) *(Brazilian Portuguese)*
 - [`electron-kr`](http://www.meetup.com/electron-kr/) *(Korean)*
 - [`electron-jp`](https://electron-jp.slack.com) *(Japanese)*
-- [`electron-tr`](https://electron-tr.slack.com) *(Turkish)*
+- [`electron-tr`](http://electron-tr.herokuapp.com) *(Turkish)*
 - [`electron-id`](https://electron-id.slack.com) *(Indonesia)*
 
 Check out [awesome-electron](https://github.com/sindresorhus/awesome-electron)

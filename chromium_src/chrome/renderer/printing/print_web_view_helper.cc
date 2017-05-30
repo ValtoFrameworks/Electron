@@ -12,7 +12,7 @@
 #include "base/json/json_writer.h"
 #include "base/logging.h"
 #include "base/message_loop/message_loop.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/process/process_handle.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
@@ -32,6 +32,7 @@
 #include "third_party/WebKit/public/web/WebDocument.h"
 #include "third_party/WebKit/public/web/WebElement.h"
 #include "third_party/WebKit/public/web/WebFrameClient.h"
+#include "third_party/WebKit/public/web/WebFrameWidget.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
 #include "third_party/WebKit/public/web/WebPlugin.h"
 #include "third_party/WebKit/public/web/WebPluginDocument.h"
@@ -484,12 +485,9 @@ void PrepareFrameAndViewForPrint::ResizeForPrinting() {
 
   // Backup size and offset if it's a local frame.
   blink::WebView* web_view = frame_.view();
-  // Backup size and offset.
-  if (blink::WebFrame* web_frame = web_view->mainFrame())
-    prev_scroll_offset_ = web_frame->scrollOffset();
   if (blink::WebFrame* web_frame = web_view->mainFrame()) {
     if (web_frame->isWebLocalFrame())
-      prev_scroll_offset_ = web_frame->scrollOffset();
+      prev_scroll_offset_ = web_frame->getScrollOffset();
   }
   prev_view_size_ = web_view->size();
 
@@ -535,8 +533,10 @@ void PrepareFrameAndViewForPrint::CopySelection(
       blink::WebView::create(this, blink::WebPageVisibilityStateVisible);
   owns_web_view_ = true;
   content::RenderView::ApplyWebPreferences(prefs, web_view);
-  web_view->setMainFrame(
-      blink::WebLocalFrame::create(blink::WebTreeScopeType::Document, this));
+  blink::WebLocalFrame* main_frame = blink::WebLocalFrame::create(
+      blink::WebTreeScopeType::Document, this, nullptr, nullptr);
+  web_view->setMainFrame(main_frame);
+  blink::WebFrameWidget::create(this, web_view, main_frame);
   frame_.Reset(web_view->mainFrame()->toWebLocalFrame());
   node_to_print_.reset();
 
@@ -565,7 +565,8 @@ blink::WebLocalFrame* PrepareFrameAndViewForPrint::createChildFrame(
     const blink::WebString& unique_name,
     blink::WebSandboxFlags sandbox_flags,
     const blink::WebFrameOwnerProperties& frame_owner_properties) {
-  blink::WebLocalFrame* frame = blink::WebLocalFrame::create(scope, this);
+  blink::WebLocalFrame* frame = blink::WebLocalFrame::create(
+      scope, this, nullptr, nullptr);
   parent->appendChild(frame);
   return frame;
 }
@@ -658,12 +659,13 @@ void PrintWebViewHelper::OnDestruct() {
 }
 
 #if !defined(DISABLE_BASIC_PRINTING)
-void PrintWebViewHelper::OnPrintPages(bool silent, bool print_background) {
+void PrintWebViewHelper::OnPrintPages(bool silent, bool print_background,
+                                      const base::string16& device_name) {
   if (ipc_nesting_level_> 1)
     return;
 
   blink::WebLocalFrame* frame = render_frame()->GetWebFrame();
-  Print(frame, blink::WebNode(), silent, print_background);
+  Print(frame, blink::WebNode(), silent, print_background, device_name);
 }
 #endif  // !DISABLE_BASIC_PRINTING
 
@@ -846,7 +848,8 @@ void PrintWebViewHelper::PrintNode(const blink::WebNode& node) {
 void PrintWebViewHelper::Print(blink::WebLocalFrame* frame,
                                const blink::WebNode& node,
                                bool silent,
-                               bool print_background) {
+                               bool print_background,
+                               const base::string16& device_name) {
   // If still not finished with earlier print request simply ignore.
   if (prep_frame_view_)
     return;
@@ -854,7 +857,7 @@ void PrintWebViewHelper::Print(blink::WebLocalFrame* frame,
   FrameReference frame_ref(frame);
 
   int expected_page_count = 0;
-  if (!CalculateNumberOfPages(frame, node, &expected_page_count)) {
+  if (!CalculateNumberOfPages(frame, node, &expected_page_count, device_name)) {
     DidFinishPrinting(FAIL_PRINT_INIT);
     return;  // Failed to init print page settings.
   }
@@ -990,10 +993,16 @@ void PrintWebViewHelper::ComputePageLayoutInPointsForCss(
   CalculatePageLayoutFromPrintParams(params, page_layout_in_points);
 }
 
-bool PrintWebViewHelper::InitPrintSettings(bool fit_to_paper_size) {
+bool PrintWebViewHelper::InitPrintSettings(bool fit_to_paper_size,
+                                           const base::string16& device_name) {
   PrintMsg_PrintPages_Params settings;
-  Send(new PrintHostMsg_GetDefaultPrintSettings(routing_id(),
-                                                &settings.params));
+  if (device_name.empty()) {
+    Send(new PrintHostMsg_GetDefaultPrintSettings(routing_id(),
+                                                  &settings.params));
+  } else {
+    Send(new PrintHostMsg_InitSettingWithDeviceName(routing_id(), device_name,
+                                                    &settings.params));
+  }
   // Check if the printer returned any settings, if the settings is empty, we
   // can safely assume there are no printer drivers configured. So we safely
   // terminate.
@@ -1018,10 +1027,11 @@ bool PrintWebViewHelper::InitPrintSettings(bool fit_to_paper_size) {
 
 bool PrintWebViewHelper::CalculateNumberOfPages(blink::WebLocalFrame* frame,
                                                 const blink::WebNode& node,
-                                                int* number_of_pages) {
+                                                int* number_of_pages,
+                                                const base::string16& device_name) {
   DCHECK(frame);
   bool fit_to_paper_size = !(PrintingNodeOrPdfFrame(frame, node));
-  if (!InitPrintSettings(fit_to_paper_size)) {
+  if (!InitPrintSettings(fit_to_paper_size, device_name)) {
     notify_browser_of_print_failure_ = false;
     Send(new PrintHostMsg_ShowInvalidPrinterSettingsError(routing_id()));
     return false;

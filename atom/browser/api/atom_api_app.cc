@@ -29,17 +29,19 @@
 #include "base/files/file_util.h"
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
+#include "base/sys_info.h"
 #include "brightray/browser/brightray_paths.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/icon_manager.h"
 #include "chrome/common/chrome_paths.h"
 #include "content/public/browser/browser_accessibility_state.h"
+#include "content/public/browser/browser_child_process_host.h"
+#include "content/public/browser/child_process_data.h"
 #include "content/public/browser/client_certificate_delegate.h"
 #include "content/public/browser/gpu_data_manager.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/common/content_switches.h"
 #include "media/audio/audio_manager.h"
-#include "native_mate/dictionary.h"
 #include "native_mate/object_template_builder.h"
 #include "net/ssl/ssl_cert_request_info.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -337,6 +339,17 @@ namespace api {
 
 namespace {
 
+class AppIdProcessIterator : public base::ProcessIterator {
+ public:
+  AppIdProcessIterator() : base::ProcessIterator(nullptr) {}
+
+ protected:
+  bool IncludeEntry() override {
+    return (entry().parent_pid() == base::GetCurrentProcId() ||
+            entry().pid() == base::GetCurrentProcId());
+  }
+};
+
 IconLoader::IconSize GetIconSizeByString(const std::string& size) {
   if (size == "small") {
     return IconLoader::IconSize::SMALL;
@@ -453,8 +466,8 @@ int ImportIntoCertStore(
 
   if (!cert_path.empty()) {
     if (base::ReadFileToString(base::FilePath(cert_path), &file_data)) {
-      auto module = model->cert_db()->GetPublicModule();
-      rv = model->ImportFromPKCS12(module,
+      auto module = model->cert_db()->GetPrivateSlot();
+      rv = model->ImportFromPKCS12(module.get(),
                                    file_data,
                                    password,
                                    true,
@@ -494,6 +507,14 @@ App::App(v8::Isolate* isolate) {
   static_cast<AtomBrowserClient*>(AtomBrowserClient::Get())->set_delegate(this);
   Browser::Get()->AddObserver(this);
   content::GpuDataManager::GetInstance()->AddObserver(this);
+  content::BrowserChildProcessObserver::Add(this);
+  base::ProcessId pid = base::GetCurrentProcId();
+  std::unique_ptr<atom::ProcessMetric> process_metric(
+      new atom::ProcessMetric(
+          content::PROCESS_TYPE_BROWSER,
+          pid,
+          base::ProcessMetrics::CreateCurrentProcessMetrics()));
+  app_metrics_[pid] = std::move(process_metric);
   Init(isolate);
 }
 
@@ -502,6 +523,7 @@ App::~App() {
       nullptr);
   Browser::Get()->RemoveObserver(this);
   content::GpuDataManager::GetInstance()->RemoveObserver(this);
+  content::BrowserChildProcessObserver::Remove(this);
 }
 
 void App::OnBeforeQuit(bool* prevent_default) {
@@ -653,6 +675,54 @@ void App::SelectClientCertificate(
 void App::OnGpuProcessCrashed(base::TerminationStatus status) {
   Emit("gpu-process-crashed",
     status == base::TERMINATION_STATUS_PROCESS_WAS_KILLED);
+}
+
+void App::BrowserChildProcessLaunchedAndConnected(
+    const content::ChildProcessData& data) {
+  ChildProcessLaunched(data.process_type, data.handle);
+}
+
+void App::BrowserChildProcessHostDisconnected(
+    const content::ChildProcessData& data) {
+  ChildProcessDisconnected(base::GetProcId(data.handle));
+}
+
+void App::BrowserChildProcessCrashed(const content::ChildProcessData& data,
+                                     int exit_code) {
+  ChildProcessDisconnected(base::GetProcId(data.handle));
+}
+
+void App::BrowserChildProcessKilled(const content::ChildProcessData& data,
+                                    int exit_code) {
+  ChildProcessDisconnected(base::GetProcId(data.handle));
+}
+
+void App::RenderProcessReady(content::RenderProcessHost* host) {
+  ChildProcessLaunched(content::PROCESS_TYPE_RENDERER, host->GetHandle());
+}
+
+void App::RenderProcessDisconnected(base::ProcessId host_pid) {
+  ChildProcessDisconnected(host_pid);
+}
+
+void App::ChildProcessLaunched(int process_type, base::ProcessHandle handle) {
+  auto pid = base::GetProcId(handle);
+
+#if defined(OS_MACOSX)
+  std::unique_ptr<base::ProcessMetrics> metrics(
+      base::ProcessMetrics::CreateProcessMetrics(
+          handle, content::BrowserChildProcessHost::GetPortProvider()));
+#else
+  std::unique_ptr<base::ProcessMetrics> metrics(
+      base::ProcessMetrics::CreateProcessMetrics(handle));
+#endif
+  std::unique_ptr<atom::ProcessMetric> process_metric(
+      new atom::ProcessMetric(process_type, pid, std::move(metrics)));
+  app_metrics_[pid] = std::move(process_metric);
+}
+
+void App::ChildProcessDisconnected(base::ProcessId pid) {
+  app_metrics_.erase(pid);
 }
 
 base::FilePath App::GetAppPath() const {
@@ -912,6 +982,45 @@ void App::GetFileIcon(const base::FilePath& path,
   }
 }
 
+std::vector<mate::Dictionary> App::GetAppMetrics(v8::Isolate* isolate) {
+  std::vector<mate::Dictionary> result;
+  int processor_count = base::SysInfo::NumberOfProcessors();
+
+  for (const auto& process_metric : app_metrics_) {
+    mate::Dictionary pid_dict = mate::Dictionary::CreateEmpty(isolate);
+    mate::Dictionary memory_dict = mate::Dictionary::CreateEmpty(isolate);
+    mate::Dictionary cpu_dict = mate::Dictionary::CreateEmpty(isolate);
+
+    memory_dict.Set("workingSetSize",
+        static_cast<double>(
+            process_metric.second->metrics->GetWorkingSetSize() >> 10));
+    memory_dict.Set("peakWorkingSetSize",
+        static_cast<double>(
+            process_metric.second->metrics->GetPeakWorkingSetSize() >> 10));
+
+    size_t private_bytes, shared_bytes;
+    if (process_metric.second->metrics->GetMemoryBytes(&private_bytes,
+                                                       &shared_bytes)) {
+      memory_dict.Set("privateBytes", static_cast<double>(private_bytes >> 10));
+      memory_dict.Set("sharedBytes", static_cast<double>(shared_bytes >> 10));
+    }
+
+    pid_dict.Set("memory", memory_dict);
+    cpu_dict.Set("percentCPUUsage",
+        process_metric.second->metrics->GetPlatformIndependentCPUUsage()
+        / processor_count);
+    cpu_dict.Set("idleWakeupsPerSecond",
+        process_metric.second->metrics->GetIdleWakeupsPerSecond());
+    pid_dict.Set("cpu", cpu_dict);
+    pid_dict.Set("pid", process_metric.second->pid);
+    pid_dict.Set("type",
+        content::GetProcessTypeNameInEnglish(process_metric.second->type));
+    result.push_back(pid_dict);
+  }
+
+  return result;
+}
+
 // static
 mate::Handle<App> App::Create(v8::Isolate* isolate) {
   return mate::CreateHandle(isolate, new App(isolate));
@@ -983,7 +1092,10 @@ void App::BuildPrototype(
                  &App::IsAccessibilitySupportEnabled)
       .SetMethod("disableHardwareAcceleration",
                  &App::DisableHardwareAcceleration)
-      .SetMethod("getFileIcon", &App::GetFileIcon);
+      .SetMethod("getFileIcon", &App::GetFileIcon)
+      .SetMethod("getAppMetrics", &App::GetAppMetrics)
+      // TODO(juturu): Remove in 2.0, deprecate before then with warnings
+      .SetMethod("getAppMemoryInfo", &App::GetAppMetrics);
 }
 
 }  // namespace api

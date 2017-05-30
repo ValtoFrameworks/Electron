@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 
+#include "atom/browser/api/atom_api_web_contents.h"
 #include "atom/browser/native_browser_view_views.h"
 #include "atom/browser/ui/views/menu_bar.h"
 #include "atom/browser/window_list.h"
@@ -86,7 +87,7 @@ bool IsAltKey(const content::NativeWebKeyboardEvent& event) {
 
 bool IsAltModifier(const content::NativeWebKeyboardEvent& event) {
   typedef content::NativeWebKeyboardEvent::Modifiers Modifiers;
-  int modifiers = event.modifiers;
+  int modifiers = event.modifiers();
   modifiers &= ~Modifiers::NumLockOn;
   modifiers &= ~Modifiers::CapsLockOn;
   return (modifiers == Modifiers::AltKey) ||
@@ -318,6 +319,8 @@ NativeWindowViews::NativeWindowViews(
 
   window_->CenterWindow(size);
   Layout();
+
+  autofill_popup_.reset(new AutofillPopup(GetNativeView()));
 
 #if defined(OS_WIN)
   // Save initial window state.
@@ -767,13 +770,14 @@ void NativeWindowViews::SetBackgroundColor(const std::string& color_name) {
 }
 
 void NativeWindowViews::SetHasShadow(bool has_shadow) {
-  wm::SetShadowType(
+  wm::SetShadowElevation(
       GetNativeWindow(),
-      has_shadow ? wm::SHADOW_TYPE_RECTANGULAR : wm::SHADOW_TYPE_NONE);
+      has_shadow ? wm::ShadowElevation::MEDIUM : wm::ShadowElevation::NONE);
 }
 
 bool NativeWindowViews::HasShadow() {
-  return wm::GetShadowType(GetNativeWindow()) != wm::SHADOW_TYPE_NONE;
+  return GetNativeWindow()->GetProperty(wm::kShadowElevationKey)
+      != wm::ShadowElevation::NONE;
 }
 
 void NativeWindowViews::SetIgnoreMouseEvents(bool ignore) {
@@ -923,7 +927,11 @@ void NativeWindowViews::SetParentWindow(NativeWindow* parent) {
 #endif
 }
 
-gfx::NativeWindow NativeWindowViews::GetNativeWindow() {
+gfx::NativeView NativeWindowViews::GetNativeView() const {
+  return window_->GetNativeView();
+}
+
+gfx::NativeWindow NativeWindowViews::GetNativeWindow() const {
   return window_->GetNativeWindow();
 }
 
@@ -994,7 +1002,7 @@ bool NativeWindowViews::IsVisibleOnAllWorkspaces() {
   return false;
 }
 
-gfx::AcceleratedWidget NativeWindowViews::GetAcceleratedWidget() {
+gfx::AcceleratedWidget NativeWindowViews::GetAcceleratedWidget() const {
   return GetNativeWindow()->GetHost()->GetAcceleratedWidget();
 }
 
@@ -1175,7 +1183,7 @@ void NativeWindowViews::OnWidgetMove() {
 }
 
 gfx::Rect NativeWindowViews::ContentBoundsToWindowBounds(
-    const gfx::Rect& bounds) {
+    const gfx::Rect& bounds) const {
   if (!has_frame())
     return bounds;
 
@@ -1196,7 +1204,7 @@ gfx::Rect NativeWindowViews::ContentBoundsToWindowBounds(
 }
 
 gfx::Rect NativeWindowViews::WindowBoundsToContentBounds(
-    const gfx::Rect& bounds) {
+    const gfx::Rect& bounds) const {
   if (!has_frame())
     return bounds;
 
@@ -1234,10 +1242,10 @@ void NativeWindowViews::HandleKeyboardEvent(
   // Show accelerator when "Alt" is pressed.
   if (menu_bar_visible_ && IsAltKey(event))
     menu_bar_->SetAcceleratorVisibility(
-        event.type == blink::WebInputEvent::RawKeyDown);
+        event.type() == blink::WebInputEvent::RawKeyDown);
 
   // Show the submenu when "Alt+Key" is pressed.
-  if (event.type == blink::WebInputEvent::RawKeyDown && !IsAltKey(event) &&
+  if (event.type() == blink::WebInputEvent::RawKeyDown && !IsAltKey(event) &&
       IsAltModifier(event)) {
     if (!menu_bar_visible_ &&
         (menu_bar_->GetAcceleratorIndex(event.windowsKeyCode) != -1))
@@ -1250,10 +1258,10 @@ void NativeWindowViews::HandleKeyboardEvent(
     return;
 
   // Toggle the menu bar only when a single Alt is released.
-  if (event.type == blink::WebInputEvent::RawKeyDown && IsAltKey(event)) {
+  if (event.type() == blink::WebInputEvent::RawKeyDown && IsAltKey(event)) {
     // When a single Alt is pressed:
     menu_bar_alt_pressed_ = true;
-  } else if (event.type == blink::WebInputEvent::KeyUp && IsAltKey(event) &&
+  } else if (event.type() == blink::WebInputEvent::KeyUp && IsAltKey(event) &&
              menu_bar_alt_pressed_) {
     // When a single Alt is released right after a Alt is pressed:
     menu_bar_alt_pressed_ = false;
@@ -1262,6 +1270,26 @@ void NativeWindowViews::HandleKeyboardEvent(
     // When any other keys except single Alt have been pressed/released:
     menu_bar_alt_pressed_ = false;
   }
+}
+
+void NativeWindowViews::ShowAutofillPopup(
+    content::RenderFrameHost* frame_host,
+    const gfx::RectF& bounds,
+    const std::vector<base::string16>& values,
+    const std::vector<base::string16>& labels) {
+  auto wc = atom::api::WebContents::FromWrappedClass(
+    v8::Isolate::GetCurrent(), web_contents());
+  autofill_popup_->CreateView(
+    frame_host,
+    wc->IsOffScreenOrEmbedderOffscreen(),
+    widget(),
+    bounds);
+  autofill_popup_->SetItems(values, labels);
+}
+
+void NativeWindowViews::HideAutofillPopup(
+    content::RenderFrameHost* frame_host) {
+  autofill_popup_->Hide();
 }
 
 void NativeWindowViews::Layout() {
@@ -1301,11 +1329,11 @@ void NativeWindowViews::Layout() {
   }
 }
 
-gfx::Size NativeWindowViews::GetMinimumSize() {
+gfx::Size NativeWindowViews::GetMinimumSize() const {
   return NativeWindow::GetMinimumSize();
 }
 
-gfx::Size NativeWindowViews::GetMaximumSize() {
+gfx::Size NativeWindowViews::GetMaximumSize() const {
   return NativeWindow::GetMaximumSize();
 }
 

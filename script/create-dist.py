@@ -9,8 +9,7 @@ import subprocess
 import sys
 import stat
 
-from lib.config import LIBCHROMIUMCONTENT_COMMIT, BASE_URL, PLATFORM, \
-                       get_target_arch, get_zip_name
+from lib.config import BASE_URL, PLATFORM, get_target_arch, get_zip_name
 from lib.util import scoped_cwd, rm_rf, get_electron_version, make_zip, \
                      execute, electron_gyp
 
@@ -20,8 +19,8 @@ ELECTRON_VERSION = get_electron_version()
 SOURCE_ROOT = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
 DIST_DIR = os.path.join(SOURCE_ROOT, 'dist')
 OUT_DIR = os.path.join(SOURCE_ROOT, 'out', 'R')
-CHROMIUM_DIR = os.path.join(SOURCE_ROOT, 'vendor', 'brightray', 'vendor',
-                            'download', 'libchromiumcontent', 'static_library')
+CHROMIUM_DIR = os.path.join(SOURCE_ROOT, 'vendor', 'download',
+                            'libchromiumcontent', 'static_library')
 
 PROJECT_NAME = electron_gyp()['project_name%']
 PRODUCT_NAME = electron_gyp()['product_name%']
@@ -91,6 +90,7 @@ def main():
 
   if PLATFORM != 'win32' and not args.no_api_docs:
     create_api_json_schema()
+    create_typescript_definitions()
 
   if PLATFORM == 'linux':
     strip_binaries()
@@ -142,6 +142,15 @@ def create_api_json_schema():
   execute(['electron-docs-linter', 'docs', '--outfile={0}'.format(outfile),
            '--version={}'.format(ELECTRON_VERSION.replace('v', ''))],
           env=env)
+
+def create_typescript_definitions():
+  node_bin_dir = os.path.join(SOURCE_ROOT, 'node_modules', '.bin')
+  env = os.environ.copy()
+  env['PATH'] = os.path.pathsep.join([node_bin_dir, env['PATH']])
+  infile = os.path.relpath(os.path.join(DIST_DIR, 'electron-api.json'))
+  outfile = os.path.relpath(os.path.join(DIST_DIR, 'electron.d.ts'))
+  execute(['electron-typescript-definitions', '--in={0}'.format(infile),
+           '--out={0}'.format(outfile)], env=env)
 
 def strip_binaries():
   for binary in TARGET_BINARIES[PLATFORM]:

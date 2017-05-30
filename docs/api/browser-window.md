@@ -307,6 +307,15 @@ It creates a new `BrowserWindow` with native properties as set by the `options`.
       'Electron Isolated Context' entry in the combo box at the top of the
       Console tab. **Note:** This option is currently experimental and may
       change or be removed in future Electron releases.
+    * `nativeWindowOpen` Boolean (optional) - Whether to use native `window.open()`. Defaults to `false`.
+    * `webviewTag` Boolean (optional) - Whether to enable the [`<webview>` tag](webview-tag.md).
+      Defaults to the value of the `nodeIntegration` option. **Note:** The
+      `preload` script configured for the `<webview>` will have node integration
+      enabled when it is executed so you should ensure remote/untrusted content
+      is not able to create a `<webview>` tag with a possibly malicious `preload`
+      script. You can use the `will-attach-webview` event on [webContents](web-contents.md)
+      to strip away the `preload` script and to validate or alter the
+      `<webview>`'s initial settings.
 
 When setting minimum or maximum window size with `minWidth`/`maxWidth`/
 `minHeight`/`maxHeight`, it only constrains the users. It won't prevent you from
@@ -378,7 +387,7 @@ remove the reference to the window and avoid using it any more.
 
 #### Event: 'session-end' _Windows_
 
-Emitted when window session is going to end due to force shutdown or machine restart 
+Emitted when window session is going to end due to force shutdown or machine restart
 or session log off.
 
 #### Event: 'unresponsive'
@@ -1027,7 +1036,7 @@ Same as `webContents.capturePage([rect, ]callback)`.
   * `httpReferrer` String (optional) - A HTTP Referrer url.
   * `userAgent` String (optional) - A user agent originating the request.
   * `extraHeaders` String (optional) - Extra headers separated by "\n"
-  * `postData` ([UploadRawData](structures/upload-raw-data.md) | [UploadFile](structures/upload-file.md) | [UploadFileSystem](structures/upload-file-system.md) | [UploadBlob](structures/upload-blob.md))[] - (optional)
+  * `postData` ([UploadRawData[]](structures/upload-raw-data.md) | [UploadFile[]](structures/upload-file.md) | [UploadFileSystem[]](structures/upload-file-system.md) | [UploadBlob[]](structures/upload-blob.md)) - (optional)
   * `baseURLForDataURL` String (optional) - Base url (with trailing path separator) for files to be loaded by the data url. This is needed only if the specified `url` is a data url and needs to load other files.
 
 Same as `webContents.loadURL(url[, options])`.

@@ -1314,11 +1314,15 @@ void NativeWindowMac::SetParentWindow(NativeWindow* parent) {
     [parent->GetNativeWindow() addChildWindow:window_ ordered:NSWindowAbove];
 }
 
-gfx::NativeWindow NativeWindowMac::GetNativeWindow() {
+gfx::NativeView NativeWindowMac::GetNativeView() const {
+  return inspectable_web_contents()->GetView()->GetNativeView();
+}
+
+gfx::NativeWindow NativeWindowMac::GetNativeWindow() const {
   return window_;
 }
 
-gfx::AcceleratedWidget NativeWindowMac::GetAcceleratedWidget() {
+gfx::AcceleratedWidget NativeWindowMac::GetAcceleratedWidget() const {
   return inspectable_web_contents()->GetView()->GetNativeView();
 }
 
@@ -1458,7 +1462,7 @@ void NativeWindowMac::SetEscapeTouchBarItem(const mate::PersistentDictionary& it
 }
 
 void NativeWindowMac::OnInputEvent(const blink::WebInputEvent& event) {
-  switch (event.type) {
+  switch (event.type()) {
     case blink::WebInputEvent::GestureScrollBegin:
     case blink::WebInputEvent::GestureScrollUpdate:
     case blink::WebInputEvent::GestureScrollEnd:
@@ -1494,7 +1498,7 @@ std::vector<gfx::Rect> NativeWindowMac::CalculateNonDraggableRegions(
 }
 
 gfx::Rect NativeWindowMac::ContentBoundsToWindowBounds(
-    const gfx::Rect& bounds) {
+    const gfx::Rect& bounds) const {
   if (has_frame()) {
     gfx::Rect window_bounds(
         [window_ frameRectForContentRect:bounds.ToCGRect()]);
@@ -1507,7 +1511,7 @@ gfx::Rect NativeWindowMac::ContentBoundsToWindowBounds(
 }
 
 gfx::Rect NativeWindowMac::WindowBoundsToContentBounds(
-    const gfx::Rect& bounds) {
+    const gfx::Rect& bounds) const {
   if (has_frame()) {
     gfx::Rect content_bounds(
         [window_ contentRectForFrameRect:bounds.ToCGRect()]);
