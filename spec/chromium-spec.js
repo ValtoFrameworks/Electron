@@ -48,35 +48,6 @@ describe('chromium feature', function () {
     })
   })
 
-  describe('document.hidden', function () {
-    var url = 'file://' + fixtures + '/pages/document-hidden.html'
-
-    it('is set correctly when window is not shown', function (done) {
-      w = new BrowserWindow({
-        show: false
-      })
-      w.webContents.once('ipc-message', function (event, args) {
-        assert.deepEqual(args, ['hidden', true])
-        done()
-      })
-      w.loadURL(url)
-    })
-
-    it('is set correctly when window is inactive', function (done) {
-      if (isCI && process.platform === 'win32') return done()
-
-      w = new BrowserWindow({
-        show: false
-      })
-      w.webContents.once('ipc-message', function (event, args) {
-        assert.deepEqual(args, ['hidden', false])
-        done()
-      })
-      w.showInactive()
-      w.loadURL(url)
-    })
-  })
-
   xdescribe('navigator.webkitGetUserMedia', function () {
     it('calls its callbacks', function (done) {
       navigator.webkitGetUserMedia({
@@ -1100,11 +1071,32 @@ describe('chromium feature', function () {
     })
   })
 
-  describe('window.history.go(offset)', function () {
-    it('throws an exception when the argumnet cannot be converted to a string', function () {
-      assert.throws(function () {
-        window.history.go({toString: null})
-      }, /Cannot convert object to primitive value/)
+  describe('window.history', function () {
+    describe('window.history.go(offset)', function () {
+      it('throws an exception when the argumnet cannot be converted to a string', function () {
+        assert.throws(function () {
+          window.history.go({toString: null})
+        }, /Cannot convert object to primitive value/)
+      })
+    })
+
+    describe('window.history.pushState', function () {
+      it('should push state after calling history.pushState() from the same url', (done) => {
+        w = new BrowserWindow({
+          show: false
+        })
+        w.webContents.once('did-finish-load', () => {
+          // History should have current page by now.
+          assert.equal(w.webContents.length(), 1)
+
+          w.webContents.executeJavaScript('window.history.pushState({}, "")', () => {
+            // Initial page + pushed state
+            assert.equal(w.webContents.length(), 2)
+            done()
+          })
+        })
+        w.loadURL('about:blank')
+      })
     })
   })
 })
