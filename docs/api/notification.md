@@ -23,7 +23,7 @@ It creates a new `Notification` with native properties as set by the `options`.
 
 The `Notification` class has the following static methods:
 
-#### `BrowserWindow.isSupported()`
+#### `Notification.isSupported()`
 
 Returns `Boolean` - Whether or not desktop notifications are supported on the current system
 
@@ -31,11 +31,13 @@ Returns `Boolean` - Whether or not desktop notifications are supported on the cu
 
 * `options` Object
   * `title` String - A title for the notification, which will be shown at the top of the notification window when it is shown
-  * `body` String - The body text of the notification, which will be displayed below the title
-  * `silent` Boolean - (Optional) Whether or not to emit an OS notification noise when showing the notification
-  * `icon` [NativeImage](native-image.md) - (Optional) An icon to use in the notification
-  * `hasReply` Boolean - (Optional) Whether or not to add an inline reply option to the notification.  _macOS_
-  * `replyPlaceholder` String - (Optional) The placeholder to write in the inline reply input field. _macOS_
+  * `subtitle` String - (optional) A subtitle for the notification, which will be displayed below the title. _macOS_
+  * `body` String - The body text of the notification, which will be displayed below the title or subtitle
+  * `silent` Boolean - (optional) Whether or not to emit an OS notification noise when showing the notification
+  * `icon` [NativeImage](native-image.md) - (optional) An icon to use in the notification
+  * `hasReply` Boolean - (optional) Whether or not to add an inline reply option to the notification.  _macOS_
+  * `replyPlaceholder` String - (optional) The placeholder to write in the inline reply input field. _macOS_
+  * `actions` [NotificationAction[]](structures/notification-action.md) - (optional) Actions to add to the notification.  Please read the available actions and limitations in the `NotificationAction` documentation _macOS_
 
 
 ### Instance Events
@@ -82,6 +84,13 @@ Returns:
 * `reply` String - The string the user entered into the inline reply field
 
 Emitted when the user clicks the "Reply" button on a notification with `hasReply: true`.
+
+#### Event: 'action' _macOS_
+
+Returns:
+
+* `event` Event
+* `index` Number - The index of the action that was activated
 
 ### Instance Methods
 

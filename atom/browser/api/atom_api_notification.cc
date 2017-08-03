@@ -14,7 +14,34 @@
 #include "brightray/browser/browser_client.h"
 #include "native_mate/constructor.h"
 #include "native_mate/dictionary.h"
+#include "native_mate/object_template_builder.h"
 #include "url/gurl.h"
+
+namespace mate {
+template<>
+struct Converter<brightray::NotificationAction> {
+  static bool FromV8(v8::Isolate* isolate, v8::Local<v8::Value> val,
+                      brightray::NotificationAction* out) {
+    mate::Dictionary dict;
+    if (!ConvertFromV8(isolate, val, &dict))
+      return false;
+
+    if (!dict.Get("type", &(out->type))) {
+      return false;
+    }
+    dict.Get("text", &(out->text));
+    return true;
+  }
+
+  static v8::Local<v8::Value> ToV8(v8::Isolate* isolate,
+                                    brightray::NotificationAction val) {
+    mate::Dictionary dict = mate::Dictionary::CreateEmpty(isolate);
+    dict.Set("text", val.text);
+    dict.Set("type", val.type);
+    return dict.GetHandle();
+  }
+};
+}  // namespace mate
 
 namespace atom {
 
@@ -30,6 +57,7 @@ Notification::Notification(v8::Isolate* isolate,
   mate::Dictionary opts;
   if (args->GetNext(&opts)) {
     opts.Get("title", &title_);
+    opts.Get("subtitle", &subtitle_);
     opts.Get("body", &body_);
     has_icon_ = opts.Get("icon", &icon_);
     if (has_icon_) {
@@ -38,6 +66,7 @@ Notification::Notification(v8::Isolate* isolate,
     opts.Get("silent", &silent_);
     opts.Get("replyPlaceholder", &reply_placeholder_);
     opts.Get("hasReply", &has_reply_);
+    opts.Get("actions", &actions_);
   }
 }
 
@@ -56,29 +85,41 @@ mate::WrappableBase* Notification::New(mate::Arguments* args) {
 }
 
 // Getters
-base::string16 Notification::GetTitle() {
+base::string16 Notification::GetTitle() const {
   return title_;
 }
 
-base::string16 Notification::GetBody() {
+base::string16 Notification::GetSubtitle() const {
+  return subtitle_;
+}
+
+base::string16 Notification::GetBody() const {
   return body_;
 }
 
-bool Notification::GetSilent() {
+bool Notification::GetSilent() const {
   return silent_;
 }
 
-base::string16 Notification::GetReplyPlaceholder() {
+base::string16 Notification::GetReplyPlaceholder() const {
   return reply_placeholder_;
 }
 
-bool Notification::GetHasReply() {
+bool Notification::GetHasReply() const {
   return has_reply_;
+}
+
+std::vector<brightray::NotificationAction> Notification::GetActions() const {
+  return actions_;
 }
 
 // Setters
 void Notification::SetTitle(const base::string16& new_title) {
   title_ = new_title;
+}
+
+void Notification::SetSubtitle(const base::string16& new_subtitle) {
+  subtitle_ = new_subtitle;
 }
 
 void Notification::SetBody(const base::string16& new_body) {
@@ -95,6 +136,15 @@ void Notification::SetReplyPlaceholder(const base::string16& new_placeholder) {
 
 void Notification::SetHasReply(bool new_has_reply) {
   has_reply_ = new_has_reply;
+}
+
+void Notification::SetActions(
+  const std::vector<brightray::NotificationAction>& actions) {
+  actions_ = actions;
+}
+
+void Notification::NotificationAction(int index) {
+  Emit("action", index);
 }
 
 void Notification::NotificationClick() {
@@ -121,8 +171,17 @@ void Notification::Show() {
   if (presenter_) {
     notification_ = presenter_->CreateNotification(this);
     if (notification_) {
-      notification_->Show(title_, body_, "", GURL(), icon_.AsBitmap(), silent_,
-                          has_reply_, reply_placeholder_);
+      brightray::NotificationOptions options;
+      options.title = title_;
+      options.subtitle = subtitle_;
+      options.msg = body_;
+      options.icon_url = GURL();
+      options.icon = icon_.AsBitmap();
+      options.silent = silent_;
+      options.has_reply = has_reply_;
+      options.reply_placeholder = reply_placeholder_;
+      options.actions = actions_;
+      notification_->Show(options);
     }
   }
 }
@@ -139,12 +198,16 @@ void Notification::BuildPrototype(v8::Isolate* isolate,
       .MakeDestroyable()
       .SetMethod("show", &Notification::Show)
       .SetProperty("title", &Notification::GetTitle, &Notification::SetTitle)
+      .SetProperty("subtitle", &Notification::GetSubtitle,
+                   &Notification::SetSubtitle)
       .SetProperty("body", &Notification::GetBody, &Notification::SetBody)
       .SetProperty("silent", &Notification::GetSilent, &Notification::SetSilent)
       .SetProperty("replyPlaceholder", &Notification::GetReplyPlaceholder,
                    &Notification::SetReplyPlaceholder)
       .SetProperty("hasReply", &Notification::GetHasReply,
-                   &Notification::SetHasReply);
+                   &Notification::SetHasReply)
+      .SetProperty("actions", &Notification::GetActions,
+                   &Notification::SetActions);
 }
 
 }  // namespace api

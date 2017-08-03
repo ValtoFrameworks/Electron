@@ -374,7 +374,8 @@ bool NativeWindowViews::IsFocused() {
 }
 
 void NativeWindowViews::Show() {
-  if (is_modal() && NativeWindow::parent())
+  if (is_modal() && NativeWindow::parent() &&
+      !window_->native_widget_private()->IsVisible())
     static_cast<NativeWindowViews*>(NativeWindow::parent())->SetEnabled(false);
 
   window_->native_widget_private()->ShowWithWindowState(GetRestoredState());
@@ -480,6 +481,8 @@ void NativeWindowViews::SetFullScreen(bool fullscreen) {
 
 #if defined(OS_WIN)
   // There is no native fullscreen state on Windows.
+  bool leaving_fullscreen = IsFullscreen() && !fullscreen;
+
   if (fullscreen) {
     last_window_state_ = ui::SHOW_STATE_FULLSCREEN;
     NotifyWindowEnterFullScreen();
@@ -505,6 +508,13 @@ void NativeWindowViews::SetFullScreen(bool fullscreen) {
   // We set the new value after notifying, so we can handle the size event
   // correctly.
   window_->SetFullscreen(fullscreen);
+
+  // If restoring from fullscreen and the window isn't visible, force visible,
+  // else a non-responsive window shell could be rendered.
+  // (this situation may arise when app starts with fullscreen: true)
+  // Note: the following must be after "window_->SetFullscreen(fullscreen);"
+  if (leaving_fullscreen && !IsVisible())
+    FlipWindowStyle(GetAcceleratedWidget(), true, WS_VISIBLE);
 #else
   if (IsVisible())
     window_->SetFullscreen(fullscreen);

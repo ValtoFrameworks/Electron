@@ -582,7 +582,20 @@ describe('webContents module', function () {
     })
   })
 
+  describe('setIgnoreMenuShortcuts(ignore)', function () {
+    it('does not throw', function () {
+      assert.equal(w.webContents.setIgnoreMenuShortcuts(true), undefined)
+      assert.equal(w.webContents.setIgnoreMenuShortcuts(false), undefined)
+    })
+  })
+
   describe('destroy()', () => {
+    // Destroying webContents in its event listener is going to crash when
+    // Electron is built in Debug mode.
+    if (process.platform !== 'darwin') {
+      return
+    }
+
     let server
 
     before(function (done) {

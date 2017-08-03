@@ -288,7 +288,22 @@ Returns:
 
 Emitted before dispatching the `keydown` and `keyup` events in the page.
 Calling `event.preventDefault` will prevent the page `keydown`/`keyup` events
-from being dispatched.
+and the menu shortcuts.
+
+To only prevent the menu shortcuts, use
+[`setIgnoreMenuShortcuts`](#contentssetignoremenushortcuts):
+
+```javascript
+const {BrowserWindow} = require('electron')
+
+let win = new BrowserWindow({width: 800, height: 600})
+
+win.webContents.on('before-input-event', (event, input) => {
+  // For example, only enable application menu keyboard shortcuts when
+  // Ctrl/Cmd are down.
+  win.webContents.setIgnoreMenuShortcuts(!input.control && !input.meta)
+})
+```
 
 #### Event: 'devtools-opened'
 
@@ -611,6 +626,10 @@ Returns `String` - The title of the current web page.
 
 Returns `Boolean` - Whether the web page is destroyed.
 
+#### `contents.focus()`
+
+Focuses the web page.
+
 #### `contents.isFocused()`
 
 Returns `Boolean` - Whether the web page is focused.
@@ -725,6 +744,12 @@ contents.executeJavaScript('fetch("https://jsonplaceholder.typicode.com/users/1"
     console.log(result) // Will be the JSON object from the fetch call
   })
 ```
+
+#### `contents.setIgnoreMenuShortcuts(ignore)` _Experimental_
+
+* `ignore` Boolean
+
+Ignore application menu shortcuts while this web contents is focused.
 
 #### `contents.setAudioMuted(muted)`
 
@@ -928,8 +953,8 @@ Returns [`PrinterInfo[]`](structures/printer-info.md)
 #### `contents.print([options])`
 
 * `options` Object (optional)
-  * `silent` Boolean - Don't ask user for print settings. Default is `false`.
-  * `printBackground` Boolean - Also prints the background color and image of
+  * `silent` Boolean (optional) - Don't ask user for print settings. Default is `false`.
+  * `printBackground` Boolean (optional) - Also prints the background color and image of
     the web page. Default is `false`.
   * `deviceName` String (optional) - Set the printer device name to use. Default is `''`.
 
@@ -1310,11 +1335,11 @@ Returns `Integer` - The `pid` of the associated renderer process.
 
 #### `contents.id`
 
-A Integer representing the unique ID of this WebContents.
+A `Integer` representing the unique ID of this WebContents.
 
 #### `contents.session`
 
-A Session object ([session](session.md)) used by this webContents.
+A [`Session`](session.md) used by this webContents.
 
 #### `contents.hostWebContents`
 

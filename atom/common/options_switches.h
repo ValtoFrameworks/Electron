@@ -35,6 +35,7 @@ extern const char kAlwaysOnTop[];
 extern const char kAcceptFirstMouse[];
 extern const char kUseContentSize[];
 extern const char kZoomToPageWidth[];
+extern const char kFullscreenWindowTitle[];
 extern const char kTitleBarStyle[];
 extern const char kTabbingIdentifier[];
 extern const char kAutoHideMenuBar[];
@@ -74,6 +75,7 @@ extern const char kWebviewTag[];
 namespace switches {
 
 extern const char kEnableSandbox[];
+extern const char kEnableMixedSandbox[];
 extern const char kEnablePlugins[];
 extern const char kPpapiFlashPath[];
 extern const char kPpapiFlashVersion[];

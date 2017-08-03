@@ -18,9 +18,11 @@
 #include "atom/browser/lib/bluetooth_chooser.h"
 #include "atom/browser/native_window.h"
 #include "atom/browser/net/atom_network_delegate.h"
+#if defined(ENABLE_OSR)
 #include "atom/browser/osr/osr_output_device.h"
 #include "atom/browser/osr/osr_render_widget_host_view.h"
 #include "atom/browser/osr/osr_web_contents_view.h"
+#endif
 #include "atom/browser/ui/drag_util.h"
 #include "atom/browser/web_contents_permission_helper.h"
 #include "atom/browser/web_contents_preferences.h"
@@ -228,8 +230,10 @@ struct Converter<atom::api::WebContents::Type> {
       *out = Type::BROWSER_VIEW;
     } else if (type == "webview") {
       *out = Type::WEB_VIEW;
+#if defined(ENABLE_OSR)
     } else if (type == "offscreen") {
       *out = Type::OFF_SCREEN;
+#endif
     } else {
       return false;
     }
@@ -314,8 +318,10 @@ WebContents::WebContents(v8::Isolate* isolate, const mate::Dictionary& options)
     type_ = BACKGROUND_PAGE;
   else if (options.Get("isBrowserView", &b) && b)
     type_ = BROWSER_VIEW;
+#if defined(ENABLE_OSR)
   else if (options.Get("offscreen", &b) && b)
     type_ = OFF_SCREEN;
+#endif
 
   // Init embedder earlier
   options.Get("embedder", &embedder_);
@@ -345,6 +351,7 @@ WebContents::WebContents(v8::Isolate* isolate, const mate::Dictionary& options)
     guest_delegate_.reset(new WebViewGuestDelegate);
     params.guest_delegate = guest_delegate_.get();
 
+#if defined(ENABLE_OSR)
     if (embedder_ && embedder_->IsOffScreen()) {
       auto* view = new OffScreenWebContentsView(false,
           base::Bind(&WebContents::OnPaint, base::Unretained(this)));
@@ -354,7 +361,9 @@ WebContents::WebContents(v8::Isolate* isolate, const mate::Dictionary& options)
       web_contents = content::WebContents::Create(params);
       view->SetWebContents(web_contents);
     } else {
+#endif
       web_contents = content::WebContents::Create(params);
+#if defined(ENABLE_OSR)
     }
   } else if (IsOffScreen()) {
     bool transparent = false;
@@ -368,6 +377,7 @@ WebContents::WebContents(v8::Isolate* isolate, const mate::Dictionary& options)
 
     web_contents = content::WebContents::Create(params);
     view->SetWebContents(web_contents);
+#endif
   } else {
     content::WebContents::CreateParams params(session->browser_context());
     web_contents = content::WebContents::Create(params);
@@ -581,10 +591,11 @@ bool WebContents::PreHandleKeyboardEvent(
     const content::NativeWebKeyboardEvent& event,
     bool* is_keyboard_shortcut) {
   if (event.type() == blink::WebInputEvent::Type::RawKeyDown ||
-      event.type() == blink::WebInputEvent::Type::KeyUp)
+      event.type() == blink::WebInputEvent::Type::KeyUp) {
     return Emit("before-input-event", event);
-  else
+  } else {
     return false;
+  }
 }
 
 void WebContents::EnterFullscreenModeForTab(content::WebContents* source,
@@ -982,6 +993,10 @@ void WebContents::LoadURL(const GURL& url, const mate::Dictionary& options) {
     return;
   }
 
+  if (guest_delegate_ && !guest_delegate_->IsAttached()) {
+    return;
+  }
+
   content::NavigationController::LoadURLParams params(url);
 
   GURL http_referrer;
@@ -1238,6 +1253,10 @@ void WebContents::UnregisterServiceWorker(
 
   context->UnregisterServiceWorker(web_contents()->GetLastCommittedURL(),
                                    callback);
+}
+
+void WebContents::SetIgnoreMenuShortcuts(bool ignore) {
+  set_ignore_menu_shortcuts(ignore);
 }
 
 void WebContents::SetAudioMuted(bool muted) {
@@ -1558,7 +1577,11 @@ bool WebContents::IsGuest() const {
 }
 
 bool WebContents::IsOffScreen() const {
+#if defined(ENABLE_OSR)
   return type_ == OFF_SCREEN;
+#else
+  return false;
+#endif
 }
 
 bool WebContents::IsOffScreenOrEmbedderOffscreen() const {
@@ -1573,56 +1596,72 @@ void WebContents::StartPainting() {
   if (!IsOffScreen())
     return;
 
+#if defined(ENABLE_OSR)
   auto* osr_rwhv = static_cast<OffScreenRenderWidgetHostView*>(
       web_contents()->GetRenderWidgetHostView());
   if (osr_rwhv)
     osr_rwhv->SetPainting(true);
+#endif
 }
 
 void WebContents::StopPainting() {
   if (!IsOffScreen())
     return;
 
+#if defined(ENABLE_OSR)
   auto* osr_rwhv = static_cast<OffScreenRenderWidgetHostView*>(
       web_contents()->GetRenderWidgetHostView());
   if (osr_rwhv)
     osr_rwhv->SetPainting(false);
+#endif
 }
 
 bool WebContents::IsPainting() const {
   if (!IsOffScreen())
     return false;
 
+#if defined(ENABLE_OSR)
   const auto* osr_rwhv = static_cast<OffScreenRenderWidgetHostView*>(
       web_contents()->GetRenderWidgetHostView());
   return osr_rwhv && osr_rwhv->IsPainting();
+#else
+  return false;
+#endif
 }
 
 void WebContents::SetFrameRate(int frame_rate) {
   if (!IsOffScreen())
     return;
 
+#if defined(ENABLE_OSR)
   auto* osr_rwhv = static_cast<OffScreenRenderWidgetHostView*>(
       web_contents()->GetRenderWidgetHostView());
   if (osr_rwhv)
     osr_rwhv->SetFrameRate(frame_rate);
+#endif
 }
 
 int WebContents::GetFrameRate() const {
   if (!IsOffScreen())
     return 0;
 
+#if defined(ENABLE_OSR)
   const auto* osr_rwhv = static_cast<OffScreenRenderWidgetHostView*>(
       web_contents()->GetRenderWidgetHostView());
   return osr_rwhv ? osr_rwhv->GetFrameRate() : 0;
+#else
+  return 0;
+#endif
 }
 
 void WebContents::Invalidate() {
   if (IsOffScreen()) {
+#if defined(ENABLE_OSR)
     auto* osr_rwhv = static_cast<OffScreenRenderWidgetHostView*>(
       web_contents()->GetRenderWidgetHostView());
     if (osr_rwhv)
       osr_rwhv->Invalidate();
+#endif
   } else {
     const auto window = owner_window();
     if (window)
@@ -1763,12 +1802,12 @@ void WebContents::BuildPrototype(v8::Isolate* isolate,
       .SetMethod("closeDevTools", &WebContents::CloseDevTools)
       .SetMethod("isDevToolsOpened", &WebContents::IsDevToolsOpened)
       .SetMethod("isDevToolsFocused", &WebContents::IsDevToolsFocused)
-      .SetMethod("enableDeviceEmulation",
-                 &WebContents::EnableDeviceEmulation)
-      .SetMethod("disableDeviceEmulation",
-                 &WebContents::DisableDeviceEmulation)
+      .SetMethod("enableDeviceEmulation", &WebContents::EnableDeviceEmulation)
+      .SetMethod("disableDeviceEmulation", &WebContents::DisableDeviceEmulation)
       .SetMethod("toggleDevTools", &WebContents::ToggleDevTools)
       .SetMethod("inspectElement", &WebContents::InspectElement)
+      .SetMethod("setIgnoreMenuShortcuts",
+                 &WebContents::SetIgnoreMenuShortcuts)
       .SetMethod("setAudioMuted", &WebContents::SetAudioMuted)
       .SetMethod("isAudioMuted", &WebContents::IsAudioMuted)
       .SetMethod("undo", &WebContents::Undo)
@@ -1789,13 +1828,14 @@ void WebContents::BuildPrototype(v8::Isolate* isolate,
       .SetMethod("tabTraverse", &WebContents::TabTraverse)
       .SetMethod("_send", &WebContents::SendIPCMessage)
       .SetMethod("sendInputEvent", &WebContents::SendInputEvent)
-      .SetMethod("beginFrameSubscription",
-                 &WebContents::BeginFrameSubscription)
+      .SetMethod("beginFrameSubscription", &WebContents::BeginFrameSubscription)
       .SetMethod("endFrameSubscription", &WebContents::EndFrameSubscription)
       .SetMethod("startDrag", &WebContents::StartDrag)
       .SetMethod("setSize", &WebContents::SetSize)
       .SetMethod("isGuest", &WebContents::IsGuest)
+#if defined(ENABLE_OSR)
       .SetMethod("isOffscreen", &WebContents::IsOffScreen)
+#endif
       .SetMethod("startPainting", &WebContents::StartPainting)
       .SetMethod("stopPainting", &WebContents::StopPainting)
       .SetMethod("isPainting", &WebContents::IsPainting)

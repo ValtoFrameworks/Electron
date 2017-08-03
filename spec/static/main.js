@@ -141,6 +141,10 @@ app.on('ready', function () {
     })
     if (chosen === 0) window.destroy()
   })
+  window.webContents.on('crashed', function () {
+    console.error('Renderer process crashed')
+    process.exit(1)
+  })
 
   // For session's download test, listen 'will-download' event in browser, and
   // reply the result to renderer for verifying
@@ -262,6 +266,12 @@ ipcMain.on('create-window-with-options-cycle', (event) => {
 
 ipcMain.on('prevent-next-new-window', (event, id) => {
   webContents.fromId(id).once('new-window', event => event.preventDefault())
+})
+
+ipcMain.on('set-web-preferences-on-next-new-window', (event, id, key, value) => {
+  webContents.fromId(id).once('new-window', (event, url, frameName, disposition, options) => {
+    options.webPreferences[key] = value
+  })
 })
 
 ipcMain.on('prevent-next-will-attach-webview', (event) => {

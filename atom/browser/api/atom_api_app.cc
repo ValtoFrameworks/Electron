@@ -35,6 +35,7 @@
 #include "chrome/browser/icon_manager.h"
 #include "chrome/common/chrome_paths.h"
 #include "content/browser/gpu/compositor_util.h"
+#include "content/browser/gpu/gpu_data_manager_impl.h"
 #include "content/public/browser/browser_accessibility_state.h"
 #include "content/public/browser/browser_child_process_host.h"
 #include "content/public/browser/child_process_data.h"
@@ -585,6 +586,11 @@ void App::OnContinueUserActivity(
     const base::DictionaryValue& user_info) {
   *prevent_default = Emit("continue-activity", type, user_info);
 }
+
+void App::OnNewWindowForTab() {
+  Emit("new-window-for-tab");
+}
+
 #endif
 
 void App::OnLogin(LoginHandler* login_handler,
@@ -847,6 +853,17 @@ void App::DisableHardwareAcceleration(mate::Arguments* args) {
   content::GpuDataManager::GetInstance()->DisableHardwareAcceleration();
 }
 
+void App::DisableDomainBlockingFor3DAPIs(mate::Arguments* args) {
+  if (Browser::Get()->is_ready()) {
+    args->ThrowError(
+        "app.disableDomainBlockingFor3DAPIs() can only be called "
+        "before app is ready");
+    return;
+  }
+  content::GpuDataManagerImpl::GetInstance()
+      ->DisableDomainBlockingFor3DAPIsForTesting();
+}
+
 bool App::IsAccessibilitySupportEnabled() {
   auto ax_state = content::BrowserAccessibilityState::GetInstance();
   return ax_state->IsAccessibleBrowser();
@@ -1028,6 +1045,33 @@ v8::Local<v8::Value> App::GetGPUFeatureStatus(v8::Isolate* isolate) {
                            status ? *status : base::DictionaryValue());
 }
 
+void App::EnableMixedSandbox(mate::Arguments* args) {
+  if (Browser::Get()->is_ready()) {
+    args->ThrowError("app.enableMixedSandbox() can only be called "
+                     "before app is ready");
+    return;
+  }
+
+  auto command_line = base::CommandLine::ForCurrentProcess();
+  if (command_line->HasSwitch(::switches::kNoSandbox)) {
+#if defined(OS_WIN)
+    const base::CommandLine::CharType* noSandboxArg = L"--no-sandbox";
+#else
+    const base::CommandLine::CharType* noSandboxArg = "--no-sandbox";
+#endif
+
+    // Remove the --no-sandbox switch
+    base::CommandLine::StringVector modified_command_line;
+    for (auto& arg : command_line->argv()) {
+      if (arg.compare(noSandboxArg) != 0) {
+        modified_command_line.push_back(arg);
+      }
+    }
+    command_line->InitFromArgv(modified_command_line);
+  }
+  command_line->AppendSwitch(switches::kEnableMixedSandbox);
+}
+
 // static
 mate::Handle<App> App::Create(v8::Isolate* isolate) {
   return mate::CreateHandle(isolate, new App(isolate));
@@ -1099,9 +1143,12 @@ void App::BuildPrototype(
                  &App::IsAccessibilitySupportEnabled)
       .SetMethod("disableHardwareAcceleration",
                  &App::DisableHardwareAcceleration)
+      .SetMethod("disableDomainBlockingFor3DAPIs",
+                 &App::DisableDomainBlockingFor3DAPIs)
       .SetMethod("getFileIcon", &App::GetFileIcon)
       .SetMethod("getAppMetrics", &App::GetAppMetrics)
       .SetMethod("getGPUFeatureStatus", &App::GetGPUFeatureStatus)
+      .SetMethod("enableMixedSandbox", &App::EnableMixedSandbox)
       // TODO(juturu): Remove in 2.0, deprecate before then with warnings
       .SetMethod("getAppMemoryInfo", &App::GetAppMetrics);
 }

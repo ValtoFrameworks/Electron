@@ -982,12 +982,21 @@ describe('chromium feature', function () {
       protocol: 'file',
       slashes: true
     })
+    const pdfSourceWithParams = url.format({
+      pathname: path.join(fixtures, 'assets', 'cat.pdf').replace(/\\/g, '/'),
+      query: {
+        a: 1,
+        b: 2
+      },
+      protocol: 'file',
+      slashes: true
+    })
 
     function createBrowserWindow ({plugins}) {
       w = new BrowserWindow({
         show: false,
         webPreferences: {
-          preload: path.join(fixtures, 'module', 'preload-inject-ipc.js'),
+          preload: path.join(fixtures, 'module', 'preload-pdf-loaded.js'),
           plugins: plugins
         }
       })
@@ -995,25 +1004,36 @@ describe('chromium feature', function () {
 
     it('opens when loading a pdf resource as top level navigation', function (done) {
       createBrowserWindow({plugins: true})
-      ipcMain.once('pdf-loaded', function (event, success) {
-        if (success) done()
+      ipcMain.once('pdf-loaded', function (event, state) {
+        assert.equal(state, 'success')
+        done()
       })
       w.webContents.on('page-title-updated', function () {
-        const source = `
-          if (window.viewer) {
-            window.viewer.setLoadCallback(function(success) {
-              window.ipcRenderer.send('pdf-loaded', success);
-            });
-          }
-        `
         const parsedURL = url.parse(w.webContents.getURL(), true)
         assert.equal(parsedURL.protocol, 'chrome:')
         assert.equal(parsedURL.hostname, 'pdf-viewer')
         assert.equal(parsedURL.query.src, pdfSource)
         assert.equal(w.webContents.getTitle(), 'cat.pdf')
-        w.webContents.executeJavaScript(source)
       })
       w.webContents.loadURL(pdfSource)
+    })
+
+    it('opens a pdf link given params, the query string should be escaped', function (done) {
+      createBrowserWindow({plugins: true})
+      ipcMain.once('pdf-loaded', function (event, state) {
+        assert.equal(state, 'success')
+        done()
+      })
+      w.webContents.on('page-title-updated', function () {
+        const parsedURL = url.parse(w.webContents.getURL(), true)
+        assert.equal(parsedURL.protocol, 'chrome:')
+        assert.equal(parsedURL.hostname, 'pdf-viewer')
+        assert.equal(parsedURL.query.src, pdfSourceWithParams)
+        assert.equal(parsedURL.query.b, undefined)
+        assert.equal(parsedURL.search, `?src=${pdfSource}%3Fa%3D1%26b%3D2`)
+        assert.equal(w.webContents.getTitle(), 'cat.pdf')
+      })
+      w.webContents.loadURL(pdfSourceWithParams)
     })
 
     it('should download a pdf when plugins are disabled', function (done) {

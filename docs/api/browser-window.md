@@ -225,6 +225,9 @@ It creates a new `BrowserWindow` with native properties as set by the `options`.
       display unless hovered over in the top left of the window. These custom
       buttons prevent issues with mouse events that occur with the standard
       window toolbar buttons. **Note:** This option is currently experimental.
+  * `fullscreenWindowTitle` Boolean (optional) - Shows the title in the
+    tile bar in full screen mode on macOS for all `titleBarStyle` options.
+    Default is `false`.
   * `thickFrame` Boolean (optional) - Use `WS_THICKFRAME` style for frameless windows on
     Windows, which adds standard window frame. Setting it to `false` will remove
     window shadow and window animations. Default is `true`.
@@ -239,7 +242,9 @@ It creates a new `BrowserWindow` with native properties as set by the `options`.
     `maximize()` directly. Default is `false`.
   * `tabbingIdentifier` String (optional) - Tab group name, allows opening the
     window as a native tab on macOS 10.12+. Windows with the same tabbing
-    identifier will be grouped together.
+    identifier will be grouped together. This also adds a native new tab button
+    to your window's tab bar and allows your `app` and window to receive the
+    `new-window-for-tab` event.
   * `webPreferences` Object (optional) - Settings of web page's features.
     * `devTools` Boolean (optional) - Whether to enable DevTools. If it is set to `false`, can not use `BrowserWindow.webContents.openDevTools()` to open DevTools. Default is `true`.
     * `nodeIntegration` Boolean (optional) - Whether node integration is enabled. Default
@@ -334,7 +339,9 @@ It creates a new `BrowserWindow` with native properties as set by the `options`.
       'Electron Isolated Context' entry in the combo box at the top of the
       Console tab. **Note:** This option is currently experimental and may
       change or be removed in future Electron releases.
-    * `nativeWindowOpen` Boolean (optional) - Whether to use native `window.open()`. Defaults to `false`.
+    * `nativeWindowOpen` Boolean (optional) - Whether to use native
+      `window.open()`. Defaults to `false`.  **Note:** This option is currently
+      experimental.
     * `webviewTag` Boolean (optional) - Whether to enable the [`<webview>` tag](webview-tag.md).
       Defaults to the value of the `nodeIntegration` option. **Note:** The
       `preload` script configured for the `<webview>` will have node integration
@@ -547,6 +554,10 @@ Emitted when the window opens a sheet.
 
 Emitted when the window has closed a sheet.
 
+#### Event: 'new-window-for-tab' _macOS_
+
+Emitted when the native new tab button is clicked.
+
 ### Static Methods
 
 The `BrowserWindow` class has the following static methods:
@@ -753,7 +764,7 @@ height areas you have within the overall content view.
 * `path` String - The absolute path to the file to preview with QuickLook. This
   is important as Quick Look uses the file name and file extension on the path
   to determine the content type of the file to open.
-* `displayName` String (Optional) - The name of the file to display on the
+* `displayName` String (optional) - The name of the file to display on the
   Quick Look modal view. This is purely visual and does not affect the content
   type of the file. Defaults to `path`.
 
