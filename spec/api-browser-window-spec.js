@@ -17,6 +17,7 @@ const nativeModulesEnabled = remote.getGlobal('nativeModulesEnabled')
 describe('BrowserWindow module', function () {
   var fixtures = path.resolve(__dirname, 'fixtures')
   var w = null
+  var ws = null
   var server, postData
 
   before(function (done) {
@@ -648,6 +649,66 @@ describe('BrowserWindow module', function () {
     })
   })
 
+  describe('BrowserWindow.selectPreviousTab()', () => {
+    it('does not throw', () => {
+      if (process.platform !== 'darwin') {
+        return
+      }
+
+      assert.doesNotThrow(() => {
+        w.selectPreviousTab()
+      })
+    })
+  })
+
+  describe('BrowserWindow.selectNextTab()', () => {
+    it('does not throw', () => {
+      if (process.platform !== 'darwin') {
+        return
+      }
+
+      assert.doesNotThrow(() => {
+        w.selectNextTab()
+      })
+    })
+  })
+
+  describe('BrowserWindow.mergeAllWindows()', () => {
+    it('does not throw', () => {
+      if (process.platform !== 'darwin') {
+        return
+      }
+
+      assert.doesNotThrow(() => {
+        w.mergeAllWindows()
+      })
+    })
+  })
+
+  describe('BrowserWindow.moveTabToNewWindow()', () => {
+    it('does not throw', () => {
+      if (process.platform !== 'darwin') {
+        return
+      }
+
+      assert.doesNotThrow(() => {
+        w.moveTabToNewWindow()
+      })
+    })
+  })
+
+  describe('BrowserWindow.toggleTabBar()', () => {
+    it('does not throw', () => {
+      if (process.platform !== 'darwin') {
+        return
+      }
+
+      assert.doesNotThrow(() => {
+        w.toggleTabBar()
+      })
+    })
+  })
+
   describe('BrowserWindow.setVibrancy(type)', function () {
     it('allows setting, changing, and removing the vibrancy', function () {
       assert.doesNotThrow(function () {
@@ -1016,8 +1077,6 @@ describe('BrowserWindow module', function () {
           }
           assert.equal(url, expectedUrl)
           assert.equal(frameName, 'popup!')
-          assert.equal(options.x, 50)
-          assert.equal(options.y, 60)
           assert.equal(options.width, 500)
           assert.equal(options.height, 600)
           ipcMain.once('answer', function (event, html) {
@@ -1043,8 +1102,6 @@ describe('BrowserWindow module', function () {
         w.loadURL(pageUrl)
         w.webContents.once('new-window', (e, url, frameName, disposition, options) => {
           assert.equal(url, 'http://www.google.com/#q=electron')
-          assert.equal(options.x, 55)
-          assert.equal(options.y, 65)
           assert.equal(options.width, 505)
           assert.equal(options.height, 605)
           ipcMain.once('child-loaded', function (event, openerIsNull, html) {
@@ -1213,10 +1270,10 @@ describe('BrowserWindow module', function () {
             sandbox: true
           }
         })
-        const initialWebContents = webContents.getAllWebContents()
+        const initialWebContents = webContents.getAllWebContents().map((i) => i.id)
         ipcRenderer.send('prevent-next-new-window', w.webContents.id)
         w.webContents.once('new-window', () => {
-          assert.deepEqual(webContents.getAllWebContents(), initialWebContents)
+          assert.deepEqual(webContents.getAllWebContents().map((i) => i.id), initialWebContents)
           done()
         })
         w.loadURL('file://' + path.join(fixtures, 'pages', 'window-open.html'))
@@ -1825,6 +1882,9 @@ describe('BrowserWindow module', function () {
     // This test is too slow, only test it on CI.
     if (!isCI) return
 
+    // FIXME These specs crash on Linux when run in a docker container
+    if (isCI && process.platform === 'linux') return
+
     it('subscribes to frame updates', function (done) {
       let called = false
       w.loadURL('file://' + fixtures + '/api/frame-subscriber.html')
@@ -2120,6 +2180,25 @@ describe('BrowserWindow module', function () {
       })
     })
 
+    describe('fullscreen state with resizable set', function () {
+      // Only implemented on macOS.
+      if (process.platform !== 'darwin') return
+
+      it('resizable flag should be set to true and restored', function (done) {
+        w.destroy()
+        w = new BrowserWindow({ resizable: false })
+        w.once('enter-full-screen', () => {
+          assert.equal(w.isResizable(), true)
+          w.setFullScreen(false)
+        })
+        w.once('leave-full-screen', () => {
+          assert.equal(w.isResizable(), false)
+          done()
+        })
+        w.setFullScreen(true)
+      })
+    })
+
     describe('fullscreen state', function () {
       // Only implemented on macOS.
       if (process.platform !== 'darwin') return
@@ -2373,7 +2452,7 @@ describe('BrowserWindow module', function () {
     })
   })
 
-  describe('dev tool extensions', function () {
+  describe('extensions and dev tools extensions', function () {
     let showPanelTimeoutId
 
     const showLastDevToolsPanel = () => {
@@ -2506,6 +2585,33 @@ describe('BrowserWindow module', function () {
       app.emit('will-quit')
       assert.equal(fs.existsSync(serializedPath), false)
     })
+
+    describe('BrowserWindow.addExtension', function () {
+      beforeEach(function () {
+        BrowserWindow.removeExtension('foo')
+        assert.equal(BrowserWindow.getExtensions().hasOwnProperty('foo'), false)
+
+        var extensionPath = path.join(__dirname, 'fixtures', 'devtools-extensions', 'foo')
+        BrowserWindow.addExtension(extensionPath)
+        assert.equal(BrowserWindow.getExtensions().hasOwnProperty('foo'), true)
+
+        showLastDevToolsPanel()
+
+        w.loadURL('about:blank')
+      })
+
+      it('throws errors for missing manifest.json files', function () {
+        assert.throws(function () {
+          BrowserWindow.addExtension(path.join(__dirname, 'does-not-exist'))
+        }, /ENOENT: no such file or directory/)
+      })
+
+      it('throws errors for invalid manifest.json files', function () {
+        assert.throws(function () {
+          BrowserWindow.addExtension(path.join(__dirname, 'fixtures', 'devtools-extensions', 'bad-manifest'))
+        }, /Unexpected token }/)
+      })
+    })
   })
 
   describe('window.webContents.executeJavaScript', function () {
@@ -2613,7 +2719,7 @@ describe('BrowserWindow module', function () {
     })
   })
 
-  describe('contextIsolation option', () => {
+  describe('contextIsolation option with and without sandbox option', () => {
     const expectedContextData = {
       preloadContext: {
         preloadProperty: 'number',
@@ -2644,6 +2750,19 @@ describe('BrowserWindow module', function () {
           preload: path.join(fixtures, 'api', 'isolated-preload.js')
         }
       })
+      if (ws != null) ws.destroy()
+      ws = new BrowserWindow({
+        show: false,
+        webPreferences: {
+          sandbox: true,
+          contextIsolation: true,
+          preload: path.join(fixtures, 'api', 'isolated-preload.js')
+        }
+      })
+    })
+
+    afterEach(() => {
+      if (ws != null) ws.destroy()
     })
 
     it('separates the page context from the Electron/preload context', (done) => {
@@ -2671,6 +2790,25 @@ describe('BrowserWindow module', function () {
         done()
       })
       w.loadURL('file://' + fixtures + '/pages/window-open.html')
+    })
+
+    it('separates the page context from the Electron/preload context with sandbox on', (done) => {
+      ipcMain.once('isolated-sandbox-world', (event, data) => {
+        assert.deepEqual(data, expectedContextData)
+        done()
+      })
+      w.loadURL('file://' + fixtures + '/api/isolated.html')
+    })
+
+    it('recreates the contexts on reload with sandbox on', (done) => {
+      w.webContents.once('did-finish-load', () => {
+        ipcMain.once('isolated-sandbox-world', (event, data) => {
+          assert.deepEqual(data, expectedContextData)
+          done()
+        })
+        w.webContents.reload()
+      })
+      w.loadURL('file://' + fixtures + '/api/isolated.html')
     })
   })
 

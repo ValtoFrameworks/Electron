@@ -143,7 +143,7 @@ class NativeWindow : public base::SupportsUserData,
   virtual std::string GetRepresentedFilename();
   virtual void SetDocumentEdited(bool edited);
   virtual bool IsDocumentEdited();
-  virtual void SetIgnoreMouseEvents(bool ignore) = 0;
+  virtual void SetIgnoreMouseEvents(bool ignore, bool forward) = 0;
   virtual void SetContentProtection(bool enable) = 0;
   virtual void SetFocusable(bool focusable);
   virtual void SetMenu(AtomMenuModel* menu);
@@ -181,6 +181,13 @@ class NativeWindow : public base::SupportsUserData,
       const std::vector<mate::PersistentDictionary>& items);
   virtual void RefreshTouchBarItem(const std::string& item_id);
   virtual void SetEscapeTouchBarItem(const mate::PersistentDictionary& item);
+
+  // Native Tab API
+  virtual void SelectPreviousTab();
+  virtual void SelectNextTab();
+  virtual void MergeAllWindows();
+  virtual void MoveTabToNewWindow();
+  virtual void ToggleTabBar();
 
   // Webview APIs.
   virtual void FocusOnWebView();

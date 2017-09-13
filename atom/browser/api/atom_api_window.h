@@ -166,7 +166,7 @@ class Window : public mate::TrackableObject<Window>,
   std::string GetRepresentedFilename();
   void SetDocumentEdited(bool edited);
   bool IsDocumentEdited();
-  void SetIgnoreMouseEvents(bool ignore);
+  void SetIgnoreMouseEvents(bool ignore, mate::Arguments* args);
   void SetContentProtection(bool enable);
   void SetFocusable(bool focusable);
   void SetProgressBar(double progress, mate::Arguments* args);
@@ -211,6 +211,12 @@ class Window : public mate::TrackableObject<Window>,
   bool IsVisibleOnAllWorkspaces();
 
   void SetAutoHideCursor(bool auto_hide);
+
+  void SelectPreviousTab();
+  void SelectNextTab();
+  void MergeAllWindows();
+  void MoveTabToNewWindow();
+  void ToggleTabBar();
 
   void SetVibrancy(mate::Arguments* args);
   void SetTouchBar(const std::vector<mate::PersistentDictionary>& items);

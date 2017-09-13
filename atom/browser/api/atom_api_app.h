@@ -171,6 +171,7 @@ class App : public AtomBrowserClient::Delegate,
   void DisableHardwareAcceleration(mate::Arguments* args);
   void DisableDomainBlockingFor3DAPIs(mate::Arguments* args);
   bool IsAccessibilitySupportEnabled();
+  void SetAccessibilitySupportEnabled(bool enabled);
   Browser::LoginItemSettings GetLoginItemSettings(mate::Arguments* args);
 #if defined(USE_NSS_CERTS)
   void ImportCertificate(const base::DictionaryValue& options,
@@ -182,6 +183,11 @@ class App : public AtomBrowserClient::Delegate,
   std::vector<mate::Dictionary> GetAppMetrics(v8::Isolate* isolate);
   v8::Local<v8::Value> GetGPUFeatureStatus(v8::Isolate* isolate);
   void EnableMixedSandbox(mate::Arguments* args);
+
+#if defined(OS_MACOSX)
+  bool MoveToApplicationsFolder(mate::Arguments* args);
+  bool IsInApplicationsFolder();
+#endif
 
 #if defined(OS_WIN)
   // Get the current Jump List settings.

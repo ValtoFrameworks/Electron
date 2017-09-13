@@ -173,6 +173,7 @@ bool ScopedDisableResize::disable_resize_ = false;
   atom::NativeWindowMac* shell_;
   bool is_zooming_;
   int level_;
+  bool is_resizable_;
 }
 - (id)initWithShell:(atom::NativeWindowMac*)shell;
 @end
@@ -335,6 +336,9 @@ bool ScopedDisableResize::disable_resize_ = false;
 }
 
 - (void)windowWillEnterFullScreen:(NSNotification*)notification {
+  // Setting resizable to true before entering fullscreen 
+  is_resizable_ = shell_->IsResizable();
+  shell_->SetResizable(true);
   // Hide the native toolbar before entering fullscreen, so there is no visual
   // artifacts.
   if (base::mac::IsAtLeastOS10_10() &&
@@ -394,6 +398,7 @@ bool ScopedDisableResize::disable_resize_ = false;
 }
 
 - (void)windowDidExitFullScreen:(NSNotification*)notification {
+  shell_->SetResizable(is_resizable_);
   shell_->NotifyWindowLeaveFullScreen();
 }
 
@@ -469,6 +474,11 @@ enum {
 @interface NSWindow (SierraSDK)
 - (void)setTabbingMode:(NSInteger)mode;
 - (void)setTabbingIdentifier:(NSString*)identifier;
+- (IBAction)selectPreviousTab:(id)sender;
+- (IBAction)selectNextTab:(id)sender;
+- (IBAction)mergeAllWindows:(id)sender;
+- (IBAction)moveTabToNewWindow:(id)sender;
+- (IBAction)toggleTabBar:(id)sender;
 @end
 
 #endif  // MAC_OS_X_VERSION_10_12
@@ -1412,7 +1422,7 @@ bool NativeWindowMac::IsDocumentEdited() {
   return [window_ isDocumentEdited];
 }
 
-void NativeWindowMac::SetIgnoreMouseEvents(bool ignore) {
+void NativeWindowMac::SetIgnoreMouseEvents(bool ignore, bool) {
   [window_ setIgnoresMouseEvents:ignore];
 }
 
@@ -1523,6 +1533,36 @@ void NativeWindowMac::SetAutoHideCursor(bool auto_hide) {
   [window_ setDisableAutoHideCursor:!auto_hide];
 }
 
+void NativeWindowMac::SelectPreviousTab() {
+  if ([window_ respondsToSelector:@selector(selectPreviousTab:)]) {
+    [window_ selectPreviousTab:nil];
+  }
+}
+
+void NativeWindowMac::SelectNextTab() {
+  if ([window_ respondsToSelector:@selector(selectNextTab:)]) {
+    [window_ selectNextTab:nil];
+  }
+}
+
+void NativeWindowMac::MergeAllWindows() {
+  if ([window_ respondsToSelector:@selector(mergeAllWindows:)]) {
+    [window_ mergeAllWindows:nil];
+  }
+}
+
+void NativeWindowMac::MoveTabToNewWindow() {
+  if ([window_ respondsToSelector:@selector(moveTabToNewWindow:)]) {
+    [window_ moveTabToNewWindow:nil];
+  }
+}
+
+void NativeWindowMac::ToggleTabBar() {
+  if ([window_ respondsToSelector:@selector(toggleTabBar:)]) {
+    [window_ toggleTabBar:nil];
+  }
+}
+
 void NativeWindowMac::SetVibrancy(const std::string& type) {
   if (!base::mac::IsAtLeastOS10_10()) return;
 
@@ -1604,10 +1644,10 @@ void NativeWindowMac::SetEscapeTouchBarItem(const mate::PersistentDictionary& it
 }
 
 void NativeWindowMac::OnInputEvent(const blink::WebInputEvent& event) {
-  switch (event.type()) {
-    case blink::WebInputEvent::GestureScrollBegin:
-    case blink::WebInputEvent::GestureScrollUpdate:
-    case blink::WebInputEvent::GestureScrollEnd:
+  switch (event.GetType()) {
+    case blink::WebInputEvent::kGestureScrollBegin:
+    case blink::WebInputEvent::kGestureScrollUpdate:
+    case blink::WebInputEvent::kGestureScrollEnd:
         this->NotifyWindowScrollTouchEdge();
       break;
     default:
@@ -1766,6 +1806,10 @@ void NativeWindowMac::UpdateDraggableRegionViews(
   // (mouseDownCanMoveWindow) and overlaying regions that are not draggable.
   std::vector<gfx::Rect> system_drag_exclude_areas =
       CalculateNonDraggableRegions(regions, webViewWidth, webViewHeight);
+
+  if (browser_view_) {
+    browser_view_->UpdateDraggableRegions(system_drag_exclude_areas);
+  }
 
   // Create and add a ControlRegionView for each region that needs to be
   // excluded from the dragging.

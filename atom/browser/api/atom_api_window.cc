@@ -651,8 +651,11 @@ bool Window::IsDocumentEdited() {
   return window_->IsDocumentEdited();
 }
 
-void Window::SetIgnoreMouseEvents(bool ignore) {
-  return window_->SetIgnoreMouseEvents(ignore);
+void Window::SetIgnoreMouseEvents(bool ignore, mate::Arguments* args) {
+  mate::Dictionary options;
+  bool forward = false;
+  args->GetNext(&options) && options.Get("forward", &forward);
+  return window_->SetIgnoreMouseEvents(ignore, forward);
 }
 
 void Window::SetContentProtection(bool enable) {
@@ -907,6 +910,26 @@ void Window::SetAutoHideCursor(bool auto_hide) {
   window_->SetAutoHideCursor(auto_hide);
 }
 
+void Window::SelectPreviousTab() {
+  window_->SelectPreviousTab();
+}
+
+void Window::SelectNextTab() {
+  window_->SelectNextTab();
+}
+
+void Window::MergeAllWindows() {
+  window_->MergeAllWindows();
+}
+
+void Window::MoveTabToNewWindow() {
+  window_->MoveTabToNewWindow();
+}
+
+void Window::ToggleTabBar() {
+  window_->ToggleTabBar();
+}
+
 void Window::SetVibrancy(mate::Arguments* args) {
   std::string type;
 
@@ -1047,6 +1070,11 @@ void Window::BuildPrototype(v8::Isolate* isolate,
                  &Window::IsVisibleOnAllWorkspaces)
 #if defined(OS_MACOSX)
       .SetMethod("setAutoHideCursor", &Window::SetAutoHideCursor)
+      .SetMethod("mergeAllWindows", &Window::MergeAllWindows)
+      .SetMethod("selectPreviousTab", &Window::SelectPreviousTab)
+      .SetMethod("selectNextTab", &Window::SelectNextTab)
+      .SetMethod("moveTabToNewWindow", &Window::MoveTabToNewWindow)
+      .SetMethod("toggleTabBar", &Window::ToggleTabBar)
 #endif
       .SetMethod("setVibrancy", &Window::SetVibrancy)
       .SetMethod("_setTouchBarItems", &Window::SetTouchBar)
