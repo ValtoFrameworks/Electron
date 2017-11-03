@@ -603,6 +603,14 @@ void Window::SetSkipTaskbar(bool skip) {
   window_->SetSkipTaskbar(skip);
 }
 
+void Window::SetSimpleFullScreen(bool simple_fullscreen) {
+  window_->SetSimpleFullScreen(simple_fullscreen);
+}
+
+bool Window::IsSimpleFullScreen() {
+  return window_->IsSimpleFullScreen();
+}
+
 void Window::SetKiosk(bool kiosk) {
   window_->SetKiosk(kiosk);
 }
@@ -621,6 +629,14 @@ void Window::SetHasShadow(bool has_shadow) {
 
 bool Window::HasShadow() {
   return window_->HasShadow();
+}
+
+void Window::SetOpacity(const double opacity) {
+  window_->SetOpacity(opacity);
+}
+
+double Window::GetOpacity() {
+  return window_->GetOpacity();
 }
 
 void Window::FocusOnWebView() {
@@ -930,6 +946,10 @@ void Window::ToggleTabBar() {
   window_->ToggleTabBar();
 }
 
+void Window::AddTabbedWindow(NativeWindow* window) {
+  window_->AddTabbedWindow(window);
+}
+
 void Window::SetVibrancy(mate::Arguments* args) {
   std::string type;
 
@@ -1041,11 +1061,15 @@ void Window::BuildPrototype(v8::Isolate* isolate,
       .SetMethod("getTitle", &Window::GetTitle)
       .SetMethod("flashFrame", &Window::FlashFrame)
       .SetMethod("setSkipTaskbar", &Window::SetSkipTaskbar)
+      .SetMethod("setSimpleFullScreen", &Window::SetSimpleFullScreen)
+      .SetMethod("isSimpleFullScreen", &Window::IsSimpleFullScreen)
       .SetMethod("setKiosk", &Window::SetKiosk)
       .SetMethod("isKiosk", &Window::IsKiosk)
       .SetMethod("setBackgroundColor", &Window::SetBackgroundColor)
       .SetMethod("setHasShadow", &Window::SetHasShadow)
       .SetMethod("hasShadow", &Window::HasShadow)
+      .SetMethod("setOpacity", &Window::SetOpacity)
+      .SetMethod("getOpacity", &Window::GetOpacity)
       .SetMethod("setRepresentedFilename", &Window::SetRepresentedFilename)
       .SetMethod("getRepresentedFilename", &Window::GetRepresentedFilename)
       .SetMethod("setDocumentEdited", &Window::SetDocumentEdited)
@@ -1075,6 +1099,7 @@ void Window::BuildPrototype(v8::Isolate* isolate,
       .SetMethod("selectNextTab", &Window::SelectNextTab)
       .SetMethod("moveTabToNewWindow", &Window::MoveTabToNewWindow)
       .SetMethod("toggleTabBar", &Window::ToggleTabBar)
+      .SetMethod("addTabbedWindow", &Window::AddTabbedWindow)
 #endif
       .SetMethod("setVibrancy", &Window::SetVibrancy)
       .SetMethod("_setTouchBarItems", &Window::SetTouchBar)

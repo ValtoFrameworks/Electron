@@ -58,6 +58,9 @@ The full Node API is built in.
 Every app's main process file is specified in the `main` property in
 `package.json`. This is how `electron .` knows what file to execute at startup.
 
+In Chromium, this process is referred to as the "browser process". It is
+renamed in Electron to avoid confusion with renderer processes.
+
 See also: [process](#process), [renderer process](#renderer-process)
 
 ### MAS
@@ -88,9 +91,11 @@ free software licenses, and is a widely-used alternative to commercial
 proprietary products like InstallShield. [electron-builder] supports NSIS
 as a build target.
 
-## OSR
+### OSR
 
-Off-screen rendering.
+OSR (Off-screen rendering) can be used for loading heavy page in 
+background and then displaying it after (it will be much faster). 
+It allows you to render page without showing it on screen.
 
 ### process
 

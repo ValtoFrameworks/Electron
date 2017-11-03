@@ -581,6 +581,16 @@ that can't be set via `<webview>` attributes.
 **Note:** The specified `preload` script option will be appear as `preloadURL`
 (not `preload`) in the `webPreferences` object emitted with this event.
 
+#### Event: 'did-attach-webview'
+
+Returns:
+
+* `event` Event
+* `webContents` WebContents - The guest web contents that is used by the
+  `<webview>`.
+
+Emitted when a `<webview>` has been attached to this web contents.
+
 ### Instance Methods
 
 #### `contents.loadURL(url[, options])`
@@ -896,10 +906,10 @@ Inserts `text` to the focused element.
     uppercase letter followed by a lowercase or non-letter.
     Accepts several other intra-word matches, defaults to `false`.
 
-Starts a request to find all matches for the `text` in the web page and returns
-an `Integer` representing the request id used for the request. The result of
-the request can be obtained by subscribing to
-[`found-in-page`](web-contents.md#event-found-in-page) event.
+Returns `Integer` - The request id used for the request.
+
+Starts a request to find all matches for the `text` in the web page. The result of the request
+can be obtained by subscribing to [`found-in-page`](web-contents.md#event-found-in-page) event.
 
 #### `contents.stopFindInPage(action)`
 

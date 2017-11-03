@@ -176,6 +176,7 @@ It creates a new `BrowserWindow` with native properties as set by the `options`.
   * `fullscreenable` Boolean (optional) - Whether the window can be put into fullscreen
     mode. On macOS, also whether the maximize/zoom button should toggle full
     screen mode or maximize window. Default is `true`.
+  * `simpleFullscreen` Boolean (optional) - Use pre-Lion fullscreen on macOS. Default is `false`.
   * `skipTaskbar` Boolean (optional) - Whether to show the window in taskbar. Default is
     `false`.
   * `kiosk` Boolean (optional) - The kiosk mode. Default is `false`.
@@ -204,6 +205,8 @@ It creates a new `BrowserWindow` with native properties as set by the `options`.
     `#FFF` (white).
   * `hasShadow` Boolean (optional) - Whether window should have a shadow. This is only
     implemented on macOS. Default is `true`.
+  * `opacity` Number (optional) - Set the initial opacity of the window, between 0.0 (fully
+    transparent) and 1.0 (fully opaque). This is only implemented on Windows and macOS.
   * `darkTheme` Boolean (optional) - Forces using dark theme for the window, only works on
     some GTK+3 desktop environments. Default is `false`.
   * `transparent` Boolean (optional) - Makes the window [transparent](frameless-window.md).
@@ -767,6 +770,18 @@ Sets whether the window should be in fullscreen mode.
 
 Returns `Boolean` - Whether the window is in fullscreen mode.
 
+#### `win.setSimpleFullScreen(flag)` _macOS_
+
+* `flag` Boolean
+
+Enters or leaves simple fullscreen mode.
+
+Simple fullscreen mode emulates the native fullscreen behavior found in versions of Mac OS X prior to Lion (10.7).
+
+#### `win.isSimpleFullScreen()` _macOS_
+
+Returns `Boolean` - Whether the window is in simple (pre-Lion) fullscreen mode.
+
 #### `win.setAspectRatio(aspectRatio[, extraSize])` _macOS_
 
 * `aspectRatio` Float - The aspect ratio to maintain for some portion of the
@@ -1193,6 +1208,16 @@ Returns `Boolean` - Whether the window has a shadow.
 On Windows and Linux always returns
 `true`.
 
+#### `win.setOpacity(opacity)` _Windows_ _macOS_
+
+* `opacity` Number - between 0.0 (fully transparent) and 1.0 (fully opaque)
+
+Sets the opacity of the window. On Linux does nothing.
+
+#### `win.getOpacity()` _Windows_ _macOS_
+
+Returns `Number` - between 0.0 (fully transparent) and 1.0 (fully opaque)
+
 #### `win.setThumbarButtons(buttons)` _Windows_
 
 * `buttons` [ThumbarButton[]](structures/thumbar-button.md)
@@ -1388,6 +1413,12 @@ there is more than one tab in the current window.
 Toggles the visibility of the tab bar if native tabs are enabled and
 there is only one tab in the current window.
 
+#### `win.addTabbedWindow(browserWindow)` _macOS_
+
+* `browserWindow` BrowserWindow
+
+Adds a window as a tab on this window, after the tab for the window instance.
+
 #### `win.setVibrancy(type)` _macOS_
 
 * `type` String - Can be `appearance-based`, `light`, `dark`, `titlebar`,
@@ -1412,10 +1443,14 @@ removed in future Electron releases.
 
 * `browserView` [BrowserView](browser-view.md)
 
+#### `win.getBrowserView()` _Experimental_
+
+Returns `BrowserView | null` - an attached BrowserView. Returns `null` if none is attached.
+
 **Note:** The BrowserView API is currently experimental and may change or be
 removed in future Electron releases.
 
-[blink-feature-string]: https://cs.chromium.org/chromium/src/third_party/WebKit/Source/platform/RuntimeEnabledFeatures.json5?l=62
+[blink-feature-string]: https://cs.chromium.org/chromium/src/third_party/WebKit/Source/platform/runtime_enabled_features.json5?l=70
 [page-visibility-api]: https://developer.mozilla.org/en-US/docs/Web/API/Page_Visibility_API
 [quick-look]: https://en.wikipedia.org/wiki/Quick_Look
 [vibrancy-docs]: https://developer.apple.com/reference/appkit/nsvisualeffectview?language=objc

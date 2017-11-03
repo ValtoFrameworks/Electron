@@ -134,11 +134,15 @@ class NativeWindow : public base::SupportsUserData,
   virtual std::string GetTitle() = 0;
   virtual void FlashFrame(bool flash) = 0;
   virtual void SetSkipTaskbar(bool skip) = 0;
+  virtual void SetSimpleFullScreen(bool simple_fullscreen) = 0;
+  virtual bool IsSimpleFullScreen() = 0;
   virtual void SetKiosk(bool kiosk) = 0;
   virtual bool IsKiosk() = 0;
   virtual void SetBackgroundColor(const std::string& color_name) = 0;
   virtual void SetHasShadow(bool has_shadow) = 0;
   virtual bool HasShadow() = 0;
+  virtual void SetOpacity(const double opacity) = 0;
+  virtual double GetOpacity() = 0;
   virtual void SetRepresentedFilename(const std::string& filename);
   virtual std::string GetRepresentedFilename();
   virtual void SetDocumentEdited(bool edited);
@@ -188,6 +192,7 @@ class NativeWindow : public base::SupportsUserData,
   virtual void MergeAllWindows();
   virtual void MoveTabToNewWindow();
   virtual void ToggleTabBar();
+  virtual void AddTabbedWindow(NativeWindow* window);
 
   // Webview APIs.
   virtual void FocusOnWebView();

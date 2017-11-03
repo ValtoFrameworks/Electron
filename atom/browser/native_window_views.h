@@ -97,11 +97,15 @@ class NativeWindowViews : public NativeWindow,
   std::string GetTitle() override;
   void FlashFrame(bool flash) override;
   void SetSkipTaskbar(bool skip) override;
+  void SetSimpleFullScreen(bool simple_fullscreen) override;
+  bool IsSimpleFullScreen() override;
   void SetKiosk(bool kiosk) override;
   bool IsKiosk() override;
   void SetBackgroundColor(const std::string& color_name) override;
   void SetHasShadow(bool has_shadow) override;
   bool HasShadow() override;
+  void SetOpacity(const double opacity) override;
+  double GetOpacity() override;
   void SetIgnoreMouseEvents(bool ignore, bool forward) override;
   void SetContentProtection(bool enable) override;
   void SetFocusable(bool focusable) override;
@@ -272,6 +276,7 @@ class NativeWindowViews : public NativeWindow,
   static HHOOK mouse_hook_;
   bool forwarding_mouse_messages_ = false;
   HWND legacy_window_ = NULL;
+  bool layered_ = false;
 #endif
 
   // Handles unhandled keyboard messages coming back from the renderer process.
@@ -291,6 +296,7 @@ class NativeWindowViews : public NativeWindow,
   bool fullscreenable_;
   std::string title_;
   gfx::Size widget_size_;
+  double opacity_ = 1.0;
 
   DISALLOW_COPY_AND_ASSIGN(NativeWindowViews);
 };

@@ -36,46 +36,32 @@ PDB_NAME = get_zip_name(PROJECT_NAME, ELECTRON_VERSION, 'pdb')
 def main():
   args = parse_args()
 
-  if not args.publish_release:
-    if not dist_newer_than_head():
-      run_python_script('create-dist.py')
+  if not dist_newer_than_head():
+    run_python_script('create-dist.py')
 
-    build_version = get_electron_build_version()
-    if not ELECTRON_VERSION.startswith(build_version):
-      error = 'Tag name ({0}) should match build version ({1})\n'.format(
-          ELECTRON_VERSION, build_version)
-      sys.stderr.write(error)
-      sys.stderr.flush()
-      return 1
+  build_version = get_electron_build_version()
+  if not ELECTRON_VERSION.startswith(build_version):
+    error = 'Tag name ({0}) should match build version ({1})\n'.format(
+        ELECTRON_VERSION, build_version)
+    sys.stderr.write(error)
+    sys.stderr.flush()
+    return 1
 
   github = GitHub(auth_token())
   releases = github.repos(ELECTRON_REPO).releases.get()
   tag_exists = False
-  for release in releases:
-    if not release['draft'] and release['tag_name'] == args.version:
+  for r in releases:
+    if not r['draft'] and r['tag_name'] == args.version:
+      release = r
       tag_exists = True
       break
 
-  release = create_or_get_release_draft(github, releases, args.version,
-                                        tag_exists)
+  assert tag_exists == args.overwrite, \
+         'You have to pass --overwrite to overwrite a published release'
 
-  if args.publish_release:
-    # Upload the Node SHASUMS*.txt.
-    run_python_script('upload-node-checksums.py', '-v', ELECTRON_VERSION)
-
-    # Upload the index.json.
-    run_python_script('upload-index-json.py')
-
-    # Create and upload the Electron SHASUMS*.txt
-    release_electron_checksums(github, release)
-
-    # Press the publish button.
-    publish_release(github, release['id'])
-
-    # TODO: run publish-to-npm script here
-
-    # Do not upload other files when passed "-p".
-    return
+  if not args.overwrite:
+    release = create_or_get_release_draft(github, releases, args.version,
+                                          tag_exists)
 
   # Upload Electron with GitHub Releases API.
   upload_electron(github, release, os.path.join(DIST_DIR, DIST_NAME))
@@ -112,6 +98,9 @@ def parse_args():
   parser = argparse.ArgumentParser(description='upload distribution file')
   parser.add_argument('-v', '--version', help='Specify the version',
                       default=ELECTRON_VERSION)
+  parser.add_argument('-o', '--overwrite',
+                      help='Overwrite a published release',
+                      action='store_true')
   parser.add_argument('-p', '--publish-release',
                       help='Publish the release',
                       action='store_true')
@@ -198,13 +187,6 @@ def create_release_draft(github, tag):
   return r
 
 
-def release_electron_checksums(github, release):
-  checksums = run_python_script('merge-electron-checksums.py',
-                                '-v', ELECTRON_VERSION)
-  upload_io_to_github(github, release, 'SHASUMS256.txt',
-                      StringIO(checksums.decode('utf-8')), 'text/plain')
-
-
 def upload_electron(github, release, file_path):
   # Delete the original file before uploading in CI.
   filename = os.path.basename(file_path)
@@ -217,8 +199,7 @@ def upload_electron(github, release, file_path):
       pass
 
   # Upload the file.
-  with open(file_path, 'rb') as f:
-    upload_io_to_github(github, release, filename, f, 'application/zip')
+  upload_io_to_github(release, filename, file_path)
 
   # Upload the checksum file.
   upload_sha256_checksum(release['tag_name'], file_path)
@@ -232,11 +213,11 @@ def upload_electron(github, release, file_path):
     upload_electron(github, release, arm_file_path)
 
 
-def upload_io_to_github(github, release, name, io, content_type):
-  params = {'name': name}
-  headers = {'Content-Type': content_type}
-  github.repos(ELECTRON_REPO).releases(release['id']).assets.post(
-      params=params, headers=headers, data=io, verify=False)
+def upload_io_to_github(release, filename, filepath):
+  print 'Uploading %s to Github' % \
+      (filename)
+  script_path = os.path.join(SOURCE_ROOT, 'script', 'upload-to-github.js')
+  execute(['node', script_path, filepath, filename, str(release['id'])])
 
 
 def upload_sha256_checksum(version, file_path):
@@ -251,11 +232,6 @@ def upload_sha256_checksum(version, file_path):
     checksum.write('{} *{}'.format(sha256.hexdigest(), filename))
   s3put(bucket, access_key, secret_key, os.path.dirname(checksum_path),
         'atom-shell/tmp/{0}'.format(version), [checksum_path])
-
-
-def publish_release(github, release_id):
-  data = dict(draft=False)
-  github.repos(ELECTRON_REPO).releases(release_id).patch(data=data)
 
 
 def auth_token():
