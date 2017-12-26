@@ -190,6 +190,7 @@ class NativeWindowViews : public NativeWindow,
       const content::NativeWebKeyboardEvent& event) override;
   void ShowAutofillPopup(
     content::RenderFrameHost* frame_host,
+    content::WebContents* web_contents,
     const gfx::RectF& bounds,
     const std::vector<base::string16>& values,
     const std::vector<base::string16>& labels) override;
@@ -227,12 +228,15 @@ class NativeWindowViews : public NativeWindow,
 
   // To disable the mouse events.
   std::unique_ptr<EventDisabler> event_disabler_;
-
+#endif
+#if defined(OS_WIN) || defined(USE_X11)
   // The "resizable" flag on Linux is implemented by setting size constraints,
   // we need to make sure size constraints are restored when window becomes
-  // resizable again.
+  // resizable again. This is also used on Windows, to keep taskbar resize
+  // events from resizing the window.
   extensions::SizeConstraints old_size_constraints_;
-#elif defined(OS_WIN)
+#endif
+#if defined(OS_WIN)
   // Weak ref.
   AtomDesktopWindowTreeHostWin* atom_desktop_window_tree_host_win_;
 

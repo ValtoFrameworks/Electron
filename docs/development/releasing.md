@@ -4,22 +4,25 @@ This document describes the process for releasing a new version of Electron.
 
 ## Determine which branch to release from
 
-- **If releasing beta,** create a new branch from `master`.
-- **If releasing a stable version,** create a new branch from the beta branch you're stabilizing.
+- **If releasing beta,** run the scripts below from `master`.
+- **If releasing a stable version,** run the scripts below from `1-7-x` or
+`1-6-x`, depending on which version you are releasing for.
 
 ## Find out what version change is needed
 Run `npm run prepare-release -- --notesOnly` to view auto generated release
 notes.  The notes generated should help you determine if this is a major, minor,
 patch, or beta version change. Read the
-[Version Change Rules](../tutorial/electron-versioning.md#version-change-rules) for more information.
+[Version Change Rules](../tutorial/electron-versioning.md#semver) for more information.
 
 ## Run the prepare-release script
 The prepare release script will do the following:
 1. Check if a release is already in process and if so it will halt.
 2. Create a release branch.
 3. Bump the version number in several files.  See [this bump commit] for an example.
-4. Create a draft release on GitHub with auto-generated release notes
-5. Push the release branch so that the release builds get built.
+4. Create a draft release on GitHub with auto-generated release notes.
+5. Push the release branch.
+6. Call the APIs to run the release builds.
+
 Once you have determined which type of version change is needed, run the
 `prepare-release` script with arguments according to your need:
 - `[major|minor|patch|beta]` to increment one of the version numbers, or
@@ -49,13 +52,11 @@ npm run prepare-release -- --stable
 ```
 
 ## Wait for builds :hourglass_flowing_sand:
-
-The presence of the word [`Bump`](https://github.com/electron/electron/blob/7961a97d7ddbed657c6c867cc8426e02c236c077/script/cibuild-linux#L3-L6) in the commit message created by the `bump-version` script
-will [trigger the release process](https://github.com/electron/electron/blob/7961a97d7ddbed657c6c867cc8426e02c236c077/script/cibuild#L82-L96).
-
+The `prepare-release` script will trigger the builds via API calls.
 To monitor the build progress, see the following pages:
 
-- [208.52.191.140:8080/view/All/builds](http://208.52.191.140:8080/view/All/builds) for Mac
+- [mac-ci.electronjs.org/blue/organizations/jenkins/electron-mas-x64-release/activity](https://mac-ci.electronjs.org/blue/organizations/jenkins/electron-mas-x64-release/activity) for Mac App Store
+- [mac-ci.electronjs.org/blue/organizations/jenkins/electron-osx-x64-release/activity](https://mac-ci.electronjs.org/blue/organizations/jenkins/electron-osx-x64-release/activity) for OS X
 - [circleci.com/gh/electron](https://circleci.com/gh/electron) for Linux
 - [windows-ci.electronjs.org/project/AppVeyor/electron](https://windows-ci.electronjs.org/project/AppVeyor/electron) for Windows
 
@@ -73,7 +74,7 @@ Tips:
 
 For a `patch` release, use the following format:
 
-```
+```sh
 ## Bug Fixes
 
 * Fixed a cross-platform thing. #123
@@ -95,7 +96,7 @@ For a `patch` release, use the following format:
 
 For a `minor` release, e.g. `1.8.0`, use this format:
 
-```
+```sh
 ## Upgrades
 
 - Upgraded from Node `oldVersion` to `newVersion`. #123
@@ -118,7 +119,7 @@ For a `minor` release, e.g. `1.8.0`, use this format:
 ```
 
 ### Major releases
-```
+```sh
 ## Upgrades
 
 - Upgraded from Chromium `oldVersion` to `newVersion`. #123
@@ -147,7 +148,7 @@ For a `minor` release, e.g. `1.8.0`, use this format:
 
 ### Beta releases
 Use the same formats as the ones suggested above, but add the following note at the beginning of the changelog:
-```
+```sh
 **Note:** This is a beta release and most likely will have have some instability and/or regressions.
 
 Please file new issues for any bugs you find in it.
@@ -206,7 +207,7 @@ release to npm.
 
 [the releases page]: https://github.com/electron/electron/releases
 [this bump commit]: https://github.com/electron/electron/commit/78ec1b8f89b3886b856377a1756a51617bc33f5a
-[electron-versioning]: /docs/tutorial/electron-versioning.md
+[versioning]: /docs/tutorial/electron-versioning.md
 
 ## Fix missing binaries of a release manually
 

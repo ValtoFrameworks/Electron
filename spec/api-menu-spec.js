@@ -279,27 +279,100 @@ describe('Menu module', () => {
     })
 
     afterEach(() => {
+      menu.closePopup()
+      menu.closePopup(w)
       return closeWindow(w).then(() => { w = null })
     })
 
-    describe('when called with async: true', () => {
-      it('returns immediately', () => {
-        menu.popup(w, {x: 100, y: 100, async: true})
-        menu.closePopup(w)
+    it('returns immediately', () => {
+      const { browserWindow, x, y } = menu.popup(w, {x: 100, y: 101})
+
+      assert.equal(browserWindow, w)
+      assert.equal(x, 100)
+      assert.equal(y, 101)
+    })
+
+    it('works without a given BrowserWindow and options', () => {
+      const { browserWindow, x, y } = menu.popup({x: 100, y: 101})
+
+      assert.equal(browserWindow.constructor.name, 'BrowserWindow')
+      assert.equal(x, 100)
+      assert.equal(y, 101)
+    })
+
+    it('works without a given BrowserWindow', () => {
+      const { browserWindow, x, y } = menu.popup(100, 101)
+
+      assert.equal(browserWindow.constructor.name, 'BrowserWindow')
+      assert.equal(x, 100)
+      assert.equal(y, 101)
+    })
+
+    it('works without a given BrowserWindow and 0 options', () => {
+      const { browserWindow, x, y } = menu.popup(0, 1)
+
+      assert.equal(browserWindow.constructor.name, 'BrowserWindow')
+      assert.equal(x, 0)
+      assert.equal(y, 1)
+    })
+
+    it('works with a given BrowserWindow and no options', () => {
+      const { browserWindow, x, y } = menu.popup(w, 100, 101)
+
+      assert.equal(browserWindow, w)
+      assert.equal(x, 100)
+      assert.equal(y, 101)
+    })
+  })
+
+  describe('Menu.closePopup()', () => {
+    let w = null
+    let menu
+
+    beforeEach((done) => {
+      w = new BrowserWindow({show: false, width: 200, height: 200})
+      menu = Menu.buildFromTemplate([
+        {
+          label: '1'
+        }
+      ])
+
+      w.loadURL('data:text/html,<html>teszt</html>')
+      w.webContents.on('dom-ready', () => {
+        done()
       })
+    })
+
+    afterEach(() => {
+      return closeWindow(w).then(() => { w = null })
+    })
+
+    it('emits closed event', (done) => {
+      menu.popup(w, {x: 100, y: 100})
+      menu.on('closed', () => {
+        done()
+      })
+      menu.closePopup(w)
     })
   })
 
   describe('Menu.setApplicationMenu', () => {
-    const menu = Menu.buildFromTemplate([
-      {
-        label: '1'
-      }, {
-        label: '2'
-      }
-    ])
-    Menu.setApplicationMenu(menu)
-    assert.notEqual(Menu.getApplicationMenu(), null)
+    it('sets a menu', () => {
+      const menu = Menu.buildFromTemplate([
+        {
+          label: '1'
+        }, {
+          label: '2'
+        }
+      ])
+      Menu.setApplicationMenu(menu)
+      assert.notEqual(Menu.getApplicationMenu(), null)
+    })
+
+    it('unsets a menu with null', () => {
+      Menu.setApplicationMenu(null)
+      assert.equal(Menu.getApplicationMenu(), null)
+    })
   })
 
   describe('MenuItem.click', () => {

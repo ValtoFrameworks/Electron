@@ -10,6 +10,9 @@ const {closeWindow} = require('./window-helpers')
 const {ipcRenderer, remote} = require('electron')
 const {ipcMain, session, BrowserWindow, net} = remote
 
+/* The whole session API doesn't use standard callbacks */
+/* eslint-disable standard/no-callback-literal */
+
 describe('session module', () => {
   let fixtures = path.resolve(__dirname, 'fixtures')
   let w = null
@@ -242,7 +245,7 @@ describe('session module', () => {
     })
 
     it('can cancel default download behavior', (done) => {
-      const mockFile = new Buffer(1024)
+      const mockFile = Buffer.alloc(1024)
       const contentDisposition = 'inline; filename="mockFile.txt"'
       const downloadServer = http.createServer((req, res) => {
         res.writeHead(200, {
@@ -271,7 +274,7 @@ describe('session module', () => {
   })
 
   describe('DownloadItem', () => {
-    const mockPDF = new Buffer(1024 * 1024 * 5)
+    const mockPDF = Buffer.alloc(1024 * 1024 * 5)
     let contentDisposition = 'inline; filename="mock.pdf"'
     const downloadFilePath = path.join(fixtures, 'mock.pdf')
     const downloadServer = http.createServer((req, res) => {
@@ -357,8 +360,12 @@ describe('session module', () => {
       })
     })
 
-    it('can generate a default filename', (done) => {
-      if (process.env.APPVEYOR === 'True') return done()
+    it('can generate a default filename', function (done) {
+      if (process.env.APPVEYOR === 'True') {
+        // FIXME(alexeykuzmin): Skip the test.
+        // this.skip()
+        return done()
+      }
 
       downloadServer.listen(0, '127.0.0.1', () => {
         const port = downloadServer.address().port

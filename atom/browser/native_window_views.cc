@@ -4,12 +4,17 @@
 
 #include "atom/browser/native_window_views.h"
 
+#if defined(OS_WIN)
+#include <objbase.h>
+#endif
 #include <string>
 #include <vector>
 
 #include "atom/browser/api/atom_api_web_contents.h"
 #include "atom/browser/native_browser_view_views.h"
 #include "atom/browser/ui/views/menu_bar.h"
+#include "atom/browser/web_contents_preferences.h"
+#include "atom/browser/web_view_manager.h"
 #include "atom/browser/window_list.h"
 #include "atom/common/color_util.h"
 #include "atom/common/draggable_region.h"
@@ -268,8 +273,9 @@ NativeWindowViews::NativeWindowViews(
       state_atom_list.push_back(GetAtom("_NET_WM_STATE_MODAL"));
   }
 
-  ui::SetAtomArrayProperty(GetAcceleratedWidget(), "_NET_WM_STATE", "ATOM",
-                           state_atom_list);
+  if (!state_atom_list.empty())
+    ui::SetAtomArrayProperty(GetAcceleratedWidget(), "_NET_WM_STATE", "ATOM",
+                             state_atom_list);
 
   // Set the _NET_WM_WINDOW_TYPE.
   if (!window_type.empty())
@@ -545,9 +551,9 @@ bool NativeWindowViews::IsFullscreen() const {
 }
 
 void NativeWindowViews::SetBounds(const gfx::Rect& bounds, bool animate) {
-#if defined(USE_X11)
-  // On Linux the minimum and maximum size should be updated with window size
-  // when window is not resizable.
+#if defined(OS_WIN) || defined(USE_X11)
+  // On Linux and Windows the minimum and maximum size should be updated with
+  // window size when window is not resizable.
   if (!resizable_) {
     SetMaximumSize(bounds.size());
     SetMinimumSize(bounds.size());
@@ -592,17 +598,14 @@ void NativeWindowViews::SetContentSizeConstraints(
   // this to determine whether native widget has initialized.
   if (window_ && window_->widget_delegate())
     window_->OnSizeConstraintsChanged();
-#if defined(USE_X11)
+#if defined(OS_WIN) || defined(USE_X11)
   if (resizable_)
     old_size_constraints_ = size_constraints;
 #endif
 }
 
 void NativeWindowViews::SetResizable(bool resizable) {
-#if defined(OS_WIN)
-  if (has_frame() && thick_frame_)
-    FlipWindowStyle(GetAcceleratedWidget(), resizable, WS_THICKFRAME);
-#elif defined(USE_X11)
+#if defined(OS_WIN) || defined(USE_X11)
   if (resizable != resizable_) {
     // On Linux there is no "resizable" property of a window, we have to set
     // both the minimum and maximum size to the window size to achieve it.
@@ -616,6 +619,10 @@ void NativeWindowViews::SetResizable(bool resizable) {
           extensions::SizeConstraints(content_size, content_size));
     }
   }
+#endif
+#if defined(OS_WIN)
+  if (has_frame() && thick_frame_)
+    FlipWindowStyle(GetAcceleratedWidget(), resizable, WS_THICKFRAME);
 #endif
 
   resizable_ = resizable;
@@ -754,8 +761,9 @@ void NativeWindowViews::FlashFrame(bool flash) {
 void NativeWindowViews::SetSkipTaskbar(bool skip) {
 #if defined(OS_WIN)
   base::win::ScopedComPtr<ITaskbarList> taskbar;
-  if (FAILED(taskbar.CreateInstance(CLSID_TaskbarList, NULL,
-                                    CLSCTX_INPROC_SERVER)) ||
+  if (FAILED(::CoCreateInstance(CLSID_TaskbarList, nullptr,
+                                CLSCTX_INPROC_SERVER,
+                                IID_PPV_ARGS(&taskbar))) ||
       FAILED(taskbar->HrInit()))
     return;
   if (skip) {
@@ -789,7 +797,7 @@ bool NativeWindowViews::IsKiosk() {
 void NativeWindowViews::SetBackgroundColor(const std::string& color_name) {
   // web views' background color.
   SkColor background_color = ParseHexColor(color_name);
-  set_background(views::Background::CreateSolidBackground(background_color));
+  SetBackground(views::CreateSolidBackground(background_color));
 
 #if defined(OS_WIN)
   // Set the background color of native window.
@@ -1357,17 +1365,41 @@ void NativeWindowViews::HandleKeyboardEvent(
 
 void NativeWindowViews::ShowAutofillPopup(
     content::RenderFrameHost* frame_host,
+    content::WebContents* web_contents,
     const gfx::RectF& bounds,
     const std::vector<base::string16>& values,
     const std::vector<base::string16>& labels) {
-  auto wc = atom::api::WebContents::FromWrappedClass(
-    v8::Isolate::GetCurrent(), web_contents());
+  bool is_offsceen = false;
+  bool is_embedder_offscreen = false;
+
+  auto* web_contents_preferences =
+      WebContentsPreferences::FromWebContents(web_contents);
+  if (web_contents_preferences) {
+    const auto* web_preferences = web_contents_preferences->web_preferences();
+
+    web_preferences->GetBoolean("offscreen", &is_offsceen);
+    int guest_instance_id = 0;
+    web_preferences->GetInteger(options::kGuestInstanceID, &guest_instance_id);
+
+    if (guest_instance_id) {
+      auto manager = WebViewManager::GetWebViewManager(web_contents);
+      if (manager) {
+        auto embedder = manager->GetEmbedder(guest_instance_id);
+        if (embedder) {
+          is_embedder_offscreen = WebContentsPreferences::IsPreferenceEnabled(
+              "offscreen", embedder);
+        }
+      }
+    }
+  }
+
   autofill_popup_->CreateView(
-    frame_host,
-    wc->IsOffScreenOrEmbedderOffscreen(),
-    widget(),
-    bounds);
+      frame_host,
+      is_offsceen || is_embedder_offscreen,
+      widget(),
+      bounds);
   autofill_popup_->SetItems(values, labels);
+  autofill_popup_->UpdatePopupBounds(menu_bar_visible_ ? 0 : kMenuBarHeight);
 }
 
 void NativeWindowViews::HideAutofillPopup(
@@ -1389,6 +1421,9 @@ void NativeWindowViews::Layout() {
         gfx::Rect(0, menu_bar_bounds.height(), size.width(),
                   size.height() - menu_bar_bounds.height()));
   }
+
+  if (autofill_popup_.get())
+    autofill_popup_->UpdatePopupBounds(menu_bar_visible_ ? 0 : kMenuBarHeight);
 }
 
 gfx::Size NativeWindowViews::GetMinimumSize() const {

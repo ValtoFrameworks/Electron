@@ -13,10 +13,12 @@
 
 #include "base/command_line.h"
 #include "base/feature_list.h"
+#include "base/message_loop/message_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "brightray/browser/browser_context.h"
 #include "brightray/browser/devtools_manager_delegate.h"
+#include "brightray/browser/media/media_capture_devices_dispatcher.h"
 #include "brightray/browser/web_ui_controller_factory.h"
 #include "brightray/common/application_info.h"
 #include "brightray/common/main_delegate.h"
@@ -266,6 +268,9 @@ int BrowserMainParts::PreCreateThreads() {
   views::LinuxUI::instance()->UpdateDeviceScaleFactor();
 #endif
 #endif
+
+  // Force MediaCaptureDevicesDispatcher to be created on UI thread.
+  MediaCaptureDevicesDispatcher::GetInstance();
 
   if (!views::LayoutProvider::Get())
     layout_provider_.reset(new views::LayoutProvider());

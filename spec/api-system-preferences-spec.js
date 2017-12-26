@@ -4,7 +4,11 @@ const {systemPreferences} = remote
 
 describe('systemPreferences module', () => {
   describe('systemPreferences.getAccentColor', () => {
-    if (process.platform !== 'win32') return
+    before(function () {
+      if (process.platform !== 'win32') {
+        this.skip()
+      }
+    })
 
     it('should return a non-empty string', () => {
       let accentColor = systemPreferences.getAccentColor()
@@ -14,7 +18,11 @@ describe('systemPreferences module', () => {
   })
 
   describe('systemPreferences.getColor(id)', () => {
-    if (process.platform !== 'win32') return
+    before(function () {
+      if (process.platform !== 'win32') {
+        this.skip()
+      }
+    })
 
     it('throws an error when the id is invalid', () => {
       assert.throws(() => {
@@ -27,10 +35,54 @@ describe('systemPreferences module', () => {
     })
   })
 
+  describe('systemPreferences.registerDefaults(defaults)', () => {
+    before(function () {
+      if (process.platform !== 'darwin') {
+        this.skip()
+      }
+    })
+
+    it('registers defaults', () => {
+      const defaultsMap = [
+        { key: 'one', type: 'string', value: 'ONE' },
+        { key: 'two', value: 2, type: 'integer' },
+        { key: 'three', value: [1, 2, 3], type: 'array' }
+      ]
+
+      const defaultsDict = {}
+      defaultsMap.forEach(row => { defaultsDict[row.key] = row.value })
+
+      systemPreferences.registerDefaults(defaultsDict)
+
+      for (const userDefault of defaultsMap) {
+        const { key, value: expectedValue, type } = userDefault
+        const actualValue = systemPreferences.getUserDefault(key, type)
+        assert.deepEqual(actualValue, expectedValue)
+      }
+    })
+
+    it('throws when bad defaults are passed', () => {
+      const badDefaults = [
+        1,
+        null,
+        new Date(),
+        { 'one': null }
+      ]
+
+      for (const badDefault of badDefaults) {
+        assert.throws(() => {
+          systemPreferences.registerDefaults(badDefault)
+        }, 'Invalid userDefault data provided')
+      }
+    })
+  })
+
   describe('systemPreferences.getUserDefault(key, type)', () => {
-    if (process.platform !== 'darwin') {
-      return
-    }
+    before(function () {
+      if (process.platform !== 'darwin') {
+        this.skip()
+      }
+    })
 
     it('returns values for known user defaults', () => {
       const locale = systemPreferences.getUserDefault('AppleLocale', 'string')
@@ -56,8 +108,6 @@ describe('systemPreferences module', () => {
   })
 
   describe('systemPreferences.setUserDefault(key, type, value)', () => {
-    if (process.platform !== 'darwin') return
-
     const KEY = 'SystemPreferencesTest'
     const TEST_CASES = [
       ['string', 'abc'],
@@ -69,6 +119,12 @@ describe('systemPreferences module', () => {
       ['array', [1, 2, 3]],
       ['dictionary', {'a': 1, 'b': 2}]
     ]
+
+    before(function () {
+      if (process.platform !== 'darwin') {
+        this.skip()
+      }
+    })
 
     it('sets values', () => {
       for (const [type, value] of TEST_CASES) {
@@ -94,7 +150,11 @@ describe('systemPreferences module', () => {
   })
 
   describe('systemPreferences.setUserDefault(key, type, value)', () => {
-    if (process.platform !== 'darwin') return
+    before(function () {
+      if (process.platform !== 'darwin') {
+        this.skip()
+      }
+    })
 
     it('removes keys', () => {
       const KEY = 'SystemPreferencesTest'

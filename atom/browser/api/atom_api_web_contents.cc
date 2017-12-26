@@ -43,6 +43,7 @@
 #include "atom/common/native_mate_converters/string16_converter.h"
 #include "atom/common/native_mate_converters/value_converter.h"
 #include "atom/common/options_switches.h"
+#include "base/message_loop/message_loop.h"
 #include "base/process/process_handle.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -480,7 +481,7 @@ bool WebContents::DidAddMessageToConsole(content::WebContents* source,
                                          const base::string16& message,
                                          int32_t line_no,
                                          const base::string16& source_id) {
-  if (type_ == BROWSER_WINDOW || type_ == OFF_SCREEN) {
+  if (type_ == OFF_SCREEN) {
     return false;
   } else {
     Emit("console-message", level, message, line_no, source_id);
@@ -493,19 +494,20 @@ void WebContents::OnCreateWindow(
     const std::string& frame_name,
     WindowOpenDisposition disposition,
     const std::vector<std::string>& features,
-    const scoped_refptr<content::ResourceRequestBodyImpl>& body) {
+    const scoped_refptr<content::ResourceRequestBody>& body) {
   if (type_ == BROWSER_WINDOW || type_ == OFF_SCREEN)
     Emit("-new-window", target_url, frame_name, disposition, features, body);
   else
     Emit("new-window", target_url, frame_name, disposition, features);
 }
 
-void WebContents::WebContentsCreated(content::WebContents* source_contents,
-                                     int opener_render_process_id,
-                                     int opener_render_frame_id,
-                                     const std::string& frame_name,
-                                     const GURL& target_url,
-                                     content::WebContents* new_contents) {
+void WebContents::WebContentsCreated(
+    content::WebContents* source_contents,
+    int opener_render_process_id,
+    int opener_render_frame_id,
+    const std::string& frame_name,
+    const GURL& target_url,
+    content::WebContents* new_contents) {
   v8::Locker locker(isolate());
   v8::HandleScope handle_scope(isolate());
   auto api_web_contents = CreateFrom(isolate(), new_contents, BROWSER_WINDOW);
@@ -651,8 +653,10 @@ void WebContents::RendererResponsive(content::WebContents* source) {
 
 bool WebContents::HandleContextMenu(const content::ContextMenuParams& params) {
   if (params.custom_context.is_pepper_menu) {
-    Emit("pepper-context-menu", std::make_pair(params, web_contents()));
-    web_contents()->NotifyContextMenuClosed(params.custom_context);
+    Emit("pepper-context-menu",
+         std::make_pair(params, web_contents()),
+         base::Bind(&content::WebContents::NotifyContextMenuClosed,
+                    base::Unretained(web_contents()), params.custom_context));
   } else {
     Emit("context-menu", std::make_pair(params, web_contents()));
   }
@@ -836,10 +840,10 @@ void WebContents::DidFinishNavigation(
   bool is_main_frame = navigation_handle->IsInMainFrame();
   if (navigation_handle->HasCommitted() && !navigation_handle->IsErrorPage()) {
     auto url = navigation_handle->GetURL();
-    bool is_in_page = navigation_handle->IsSameDocument();
-    if (is_main_frame && !is_in_page) {
+    bool is_same_document = navigation_handle->IsSameDocument();
+    if (is_main_frame && !is_same_document) {
       Emit("did-navigate", url);
-    } else if (is_in_page) {
+    } else if (is_same_document) {
       Emit("did-navigate-in-page", url, is_main_frame);
     }
   } else {
@@ -864,7 +868,7 @@ void WebContents::DidUpdateFaviconURL(
     const std::vector<content::FaviconURL>& urls) {
   std::set<GURL> unique_urls;
   for (const auto& iter : urls) {
-    if (iter.icon_type != content::FaviconURL::FAVICON)
+    if (iter.icon_type != content::FaviconURL::IconType::kFavicon)
       continue;
     const GURL& url = iter.icon_url;
     if (url.is_valid())
@@ -893,10 +897,11 @@ void WebContents::DevToolsOpened() {
   managed_web_contents()->CallClientFunction(
       "DevToolsAPI.setInspectedTabId", &tab_id, nullptr, nullptr);
 
-  // Inherit owner window in devtools.
-  if (owner_window())
-    handle->SetOwnerWindow(managed_web_contents()->GetDevToolsWebContents(),
-                           owner_window());
+  // Inherit owner window in devtools when it doesn't have one.
+  auto* devtools = managed_web_contents()->GetDevToolsWebContents();
+  bool has_window = devtools->GetUserData(NativeWindowRelay::UserDataKey());
+  if (owner_window() && !has_window)
+    handle->SetOwnerWindow(devtools, owner_window());
 
   Emit("devtools-opened");
 }
@@ -907,6 +912,17 @@ void WebContents::DevToolsClosed() {
   devtools_web_contents_.Reset();
 
   Emit("devtools-closed");
+}
+
+void WebContents::ShowAutofillPopup(content::RenderFrameHost* frame_host,
+                                    const gfx::RectF& bounds,
+                                    const std::vector<base::string16>& values,
+                                    const std::vector<base::string16>& labels) {
+  auto relay = NativeWindowRelay::FromWebContents(web_contents());
+  if (relay) {
+    relay->window->ShowAutofillPopup(
+        frame_host, web_contents(), bounds, values, labels);
+  }
 }
 
 bool WebContents::OnMessageReceived(const IPC::Message& message) {
@@ -933,9 +949,10 @@ bool WebContents::OnMessageReceived(const IPC::Message& message,
   auto relay = NativeWindowRelay::FromWebContents(web_contents());
   if (!relay)
     return false;
+  IPC_BEGIN_MESSAGE_MAP_WITH_PARAM(WebContents, message, frame_host)
+    IPC_MESSAGE_HANDLER(AtomAutofillFrameHostMsg_ShowPopup, ShowAutofillPopup)
+  IPC_END_MESSAGE_MAP()
   IPC_BEGIN_MESSAGE_MAP_WITH_PARAM(NativeWindow, message, frame_host)
-    IPC_MESSAGE_FORWARD(AtomAutofillFrameHostMsg_ShowPopup,
-      relay->window.get(), NativeWindow::ShowAutofillPopup)
     IPC_MESSAGE_FORWARD(AtomAutofillFrameHostMsg_HidePopup,
       relay->window.get(), NativeWindow::HideAutofillPopup)
     IPC_MESSAGE_UNHANDLED(handled = false)
@@ -974,7 +991,7 @@ void WebContents::WebContentsDestroyed() {
 void WebContents::NavigationEntryCommitted(
     const content::LoadCommittedDetails& details) {
   Emit("navigation-entry-commited", details.entry->GetURL(),
-       details.is_in_page, details.did_replace_entry);
+       details.is_same_document, details.did_replace_entry);
 }
 
 int64_t WebContents::GetID() const {
@@ -1030,7 +1047,7 @@ void WebContents::LoadURL(const GURL& url, const mate::Dictionary& options) {
   if (options.Get("extraHeaders", &extra_headers))
     params.extra_headers = extra_headers;
 
-  scoped_refptr<content::ResourceRequestBodyImpl> body;
+  scoped_refptr<content::ResourceRequestBody> body;
   if (options.Get("postData", &body)) {
     params.post_data = body;
     params.load_type = content::NavigationController::LOAD_TYPE_HTTP_POST;
@@ -1071,7 +1088,7 @@ void WebContents::DownloadURL(const GURL& url) {
 
   download_manager->DownloadUrl(
       content::DownloadUrlParameters::CreateForWebContentsMainFrame(
-          web_contents(), url));
+          web_contents(), url, NO_TRAFFIC_ANNOTATION_YET));
 }
 
 GURL WebContents::GetURL() const {
@@ -1164,7 +1181,8 @@ void WebContents::OpenDevTools(mate::Arguments* args) {
   std::string state;
   if (type_ == WEB_VIEW || !owner_window()) {
     state = "detach";
-  } else if (args && args->Length() == 1) {
+  }
+  if (args && args->Length() == 1) {
     bool detach = false;
     mate::Dictionary options;
     if (args->GetNext(&options)) {
@@ -1464,7 +1482,8 @@ void WebContents::SendInputEvent(v8::Isolate* isolate,
   if (!view)
     return;
 
-  int type = mate::GetWebInputEventType(isolate, input_event);
+  blink::WebInputEvent::Type type = mate::GetWebInputEventType(isolate,
+      input_event);
   if (blink::WebInputEvent::IsMouseEventType(type)) {
     blink::WebMouseEvent mouse_event;
     if (mate::ConvertFromV8(isolate, input_event, &mouse_event)) {
@@ -1477,7 +1496,7 @@ void WebContents::SendInputEvent(v8::Isolate* isolate,
         blink::WebInputEvent::kNoModifiers,
         ui::EventTimeForNow());
     if (mate::ConvertFromV8(isolate, input_event, &keyboard_event)) {
-      view->ProcessKeyboardEvent(keyboard_event);
+      view->ProcessKeyboardEvent(keyboard_event, ui::LatencyInfo());
       return;
     }
   } else if (type == blink::WebInputEvent::kMouseWheel) {
@@ -1621,10 +1640,6 @@ bool WebContents::IsOffScreen() const {
 #else
   return false;
 #endif
-}
-
-bool WebContents::IsOffScreenOrEmbedderOffscreen() const {
-  return IsOffScreen() || (embedder_ && embedder_->IsOffScreen());
 }
 
 void WebContents::OnPaint(const gfx::Rect& dirty_rect, const SkBitmap& bitmap) {
@@ -1797,6 +1812,11 @@ void WebContents::SetEmbedder(const WebContents* embedder) {
   }
 }
 
+void WebContents::SetDevToolsWebContents(const WebContents* devtools) {
+  if (managed_web_contents())
+    managed_web_contents()->SetDevToolsWebContents(devtools->web_contents());
+}
+
 v8::Local<v8::Value> WebContents::GetNativeView() const {
   gfx::NativeView ptr = web_contents()->GetNativeView();
   auto buffer = node::Buffer::Copy(
@@ -1918,6 +1938,7 @@ void WebContents::BuildPrototype(v8::Isolate* isolate,
       .SetMethod("copyImageAt", &WebContents::CopyImageAt)
       .SetMethod("capturePage", &WebContents::CapturePage)
       .SetMethod("setEmbedder", &WebContents::SetEmbedder)
+      .SetMethod("setDevToolsWebContents", &WebContents::SetDevToolsWebContents)
       .SetMethod("getNativeView", &WebContents::GetNativeView)
       .SetMethod("setWebRTCIPHandlingPolicy",
                  &WebContents::SetWebRTCIPHandlingPolicy)

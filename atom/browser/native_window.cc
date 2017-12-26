@@ -65,6 +65,7 @@ NativeWindow::NativeWindow(
       aspect_ratio_(0.0),
       parent_(parent),
       is_modal_(false),
+      is_osr_dummy_(false),
       inspectable_web_contents_(inspectable_web_contents),
       weak_factory_(this) {
   options.Get(options::kFrame, &has_frame_);
@@ -147,13 +148,11 @@ void NativeWindow::InitFromOptions(const mate::Dictionary& options) {
   } else {
     SetSizeConstraints(size_constraints);
   }
-#if defined(USE_X11)
+#if defined(OS_WIN) || defined(USE_X11)
   bool resizable;
   if (options.Get(options::kResizable, &resizable)) {
     SetResizable(resizable);
   }
-#endif
-#if defined(OS_WIN) || defined(USE_X11)
   bool closable;
   if (options.Get(options::kClosable, &closable)) {
     SetClosable(closable);

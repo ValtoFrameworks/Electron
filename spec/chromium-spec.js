@@ -11,6 +11,9 @@ const {app, BrowserWindow, ipcMain, protocol, session, webContents} = remote
 
 const isCI = remote.getGlobal('isCi')
 
+/* Most of the APIs here don't use standard callbacks */
+/* eslint-disable standard/no-callback-literal */
+
 describe('chromium feature', () => {
   const fixtures = path.resolve(__dirname, 'fixtures')
   let listener = null
@@ -26,8 +29,7 @@ describe('chromium feature', () => {
   afterEach(() => closeWindow(w).then(() => { w = null }))
 
   describe('heap snapshot', () => {
-    it('does not crash', () => {
-      if (process.env.TRAVIS === 'true') return
+    it('does not crash', function () {
       process.atomBinding('v8_util').takeHeapSnapshot()
     })
   })
@@ -165,8 +167,6 @@ describe('chromium feature', () => {
   })
 
   describe('window.open', () => {
-    if (process.env.TRAVIS === 'true' && process.platform === 'darwin') return
-
     it('returns a BrowserWindowProxy object', () => {
       const b = window.open('about:blank', '', 'show=no')
       assert.equal(b.closed, false)
@@ -666,10 +666,18 @@ describe('chromium feature', () => {
   })
 
   describe('webgl', () => {
-    if (isCI && process.platform === 'win32') return
+    before(function () {
+      if (isCI && process.platform === 'win32') {
+        this.skip()
+      }
+    })
 
     it('can be get as context in canvas', () => {
-      if (process.platform === 'linux') return
+      if (process.platform === 'linux') {
+        // FIXME(alexeykuzmin): Skip the test.
+        // this.skip()
+        return
+      }
 
       const webgl = document.createElement('canvas').getContext('webgl')
       assert.notEqual(webgl, null)
@@ -955,18 +963,40 @@ describe('chromium feature', () => {
       slashes: true
     })
 
-    function createBrowserWindow ({plugins}) {
+    function createBrowserWindow ({plugins, preload}) {
       w = new BrowserWindow({
         show: false,
         webPreferences: {
-          preload: path.join(fixtures, 'module', 'preload-pdf-loaded.js'),
+          preload: path.join(fixtures, 'module', preload),
           plugins: plugins
         }
       })
     }
 
+    function testPDFIsLoadedInSubFrame (page, preloadFile, done) {
+      const pagePath = url.format({
+        pathname: path.join(fixtures, 'pages', page).replace(/\\/g, '/'),
+        protocol: 'file',
+        slashes: true
+      })
+
+      createBrowserWindow({plugins: true, preload: preloadFile})
+      ipcMain.once('pdf-loaded', (event, state) => {
+        assert.equal(state, 'success')
+        done()
+      })
+      w.webContents.on('page-title-updated', () => {
+        const parsedURL = url.parse(w.webContents.getURL(), true)
+        assert.equal(parsedURL.protocol, 'chrome:')
+        assert.equal(parsedURL.hostname, 'pdf-viewer')
+        assert.equal(parsedURL.query.src, pagePath)
+        assert.equal(w.webContents.getTitle(), 'cat.pdf')
+      })
+      w.webContents.loadURL(pagePath)
+    }
+
     it('opens when loading a pdf resource as top level navigation', (done) => {
-      createBrowserWindow({plugins: true})
+      createBrowserWindow({plugins: true, preload: 'preload-pdf-loaded.js'})
       ipcMain.once('pdf-loaded', (event, state) => {
         assert.equal(state, 'success')
         done()
@@ -982,7 +1012,7 @@ describe('chromium feature', () => {
     })
 
     it('opens a pdf link given params, the query string should be escaped', (done) => {
-      createBrowserWindow({plugins: true})
+      createBrowserWindow({plugins: true, preload: 'preload-pdf-loaded.js'})
       ipcMain.once('pdf-loaded', (event, state) => {
         assert.equal(state, 'success')
         done()
@@ -1000,7 +1030,7 @@ describe('chromium feature', () => {
     })
 
     it('should download a pdf when plugins are disabled', (done) => {
-      createBrowserWindow({plugins: false})
+      createBrowserWindow({plugins: false, preload: 'preload-pdf-loaded.js'})
       ipcRenderer.sendSync('set-download-option', false, false)
       ipcRenderer.once('download-done', (event, state, url, mimeType, receivedBytes, totalBytes, disposition, filename) => {
         assert.equal(state, 'completed')
@@ -1013,7 +1043,7 @@ describe('chromium feature', () => {
     })
 
     it('should not open when pdf is requested as sub resource', (done) => {
-      createBrowserWindow({plugins: true})
+      createBrowserWindow({plugins: true, preload: 'preload-pdf-loaded.js'})
       webFrame.registerURLSchemeAsPrivileged('file', {
         secure: false,
         bypassCSP: false,
@@ -1025,6 +1055,14 @@ describe('chromium feature', () => {
         assert.notEqual(document.title, 'cat.pdf')
         done()
       }).catch((e) => done(e))
+    })
+
+    it('opens when loading a pdf resource in a iframe', (done) => {
+      testPDFIsLoadedInSubFrame('pdf-in-iframe.html', 'preload-pdf-loaded-in-subframe.js', done)
+    })
+
+    it('opens when loading a pdf resource in a nested iframe', (done) => {
+      testPDFIsLoadedInSubFrame('pdf-in-nested-iframe.html', 'preload-pdf-loaded-in-nested-subframe.js', done)
     })
   })
 

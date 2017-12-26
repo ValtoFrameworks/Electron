@@ -3,6 +3,7 @@
 require('colors')
 const args = require('minimist')(process.argv.slice(2))
 const assert = require('assert')
+const ciReleaseBuild = require('./ci-release-build')
 const { execSync } = require('child_process')
 const fail = '\u2717'.red
 const { GitProcess, GitError } = require('dugite')
@@ -121,7 +122,7 @@ async function createRelease (branchToTarget, isBeta) {
   let drafts = releases.data.filter(release => release.draft)
   if (drafts.length > 0) {
     console.log(`${fail} Aborting because draft release for
-      ${drafts[0].release.tag_name} already exists.`)
+      ${drafts[0].tag_name} already exists.`)
     process.exit(1)
   }
   console.log(`${pass} A draft release does not exist; creating one.`)
@@ -158,6 +159,12 @@ async function pushRelease () {
   }
 }
 
+async function runReleaseBuilds () {
+  await ciReleaseBuild('release', {
+    ghRelease: true
+  })
+}
+
 async function prepareRelease (isBeta, notesOnly) {
   let currentBranch = await getCurrentBranch(gitDir)
   if (notesOnly) {
@@ -167,6 +174,7 @@ async function prepareRelease (isBeta, notesOnly) {
     await createReleaseBranch()
     await createRelease(currentBranch, isBeta)
     await pushRelease()
+    await runReleaseBuilds()
   }
 }
 

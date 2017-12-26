@@ -53,10 +53,10 @@ describe('crashReporter module', () => {
       })
 
       it('should send minidump when renderer crashes', function (done) {
+        // TODO(alexeykuzmin): Skip the test instead of marking it as passed.
         if (process.env.APPVEYOR === 'True') return done()
-        if (process.env.TRAVIS === 'true') return done()
 
-        this.timeout(120000)
+        this.timeout(180000)
 
         stopServer = startServer({
           callback (port) {
@@ -71,11 +71,12 @@ describe('crashReporter module', () => {
           done: done
         })
       })
-      it('should send minidump when node processes crash', function (done) {
-        if (process.env.APPVEYOR === 'True') return done()
-        if (process.env.TRAVIS === 'true') return done()
 
-        this.timeout(120000)
+      it('should send minidump when node processes crash', function (done) {
+        // TODO(alexeykuzmin): Skip the test instead of marking it as passed.
+        if (process.env.APPVEYOR === 'True') return done()
+
+        this.timeout(180000)
 
         stopServer = startServer({
           callback (port) {
@@ -103,8 +104,9 @@ describe('crashReporter module', () => {
           done: done
         })
       })
+
       it('should not send minidump if uploadToServer is false', function (done) {
-        this.timeout(120000)
+        this.timeout(180000)
 
         let dumpFile
         let crashesDir = crashReporter.getCrashesDirectory()
@@ -164,11 +166,12 @@ describe('crashReporter module', () => {
           done: testDone.bind(null, true)
         })
       })
-      it('should send minidump with updated extra parameters', function (done) {
-        if (process.env.APPVEYOR === 'True') return done()
-        if (process.env.TRAVIS === 'true') return done()
 
-        this.timeout(120000)
+      it('should send minidump with updated extra parameters', function (done) {
+        // TODO(alexeykuzmin): Skip the test instead of marking it as passed.
+        if (process.env.APPVEYOR === 'True') return done()
+
+        this.timeout(180000)
 
         stopServer = startServer({
           callback (port) {
@@ -255,11 +258,9 @@ describe('crashReporter module', () => {
 
   describe('getLastCrashReport', () => {
     it('correctly returns the most recent report', () => {
-      if (process.env.TRAVIS === 'False') {
-        const reports = crashReporter.getUploadedReports()
-        const lastReport = reports[0]
-        assert(lastReport != null)
-      }
+      const reports = crashReporter.getUploadedReports()
+      const lastReport = reports[0]
+      assert(lastReport != null)
     })
   })
 
@@ -267,26 +268,34 @@ describe('crashReporter module', () => {
     it('throws an error when called from the renderer process', () => {
       assert.throws(() => require('electron').crashReporter.getUploadToServer())
     })
-    it('returns true when uploadToServer is set to true', () => {
-      if (process.platform === 'darwin') {
-        crashReporter.start({
-          companyName: 'Umbrella Corporation',
-          submitURL: 'http://127.0.0.1/crashes',
-          uploadToServer: true
-        })
-        assert.equal(crashReporter.getUploadToServer(), true)
+    it('returns true when uploadToServer is set to true', function () {
+      if (process.platform !== 'darwin') {
+        // FIXME(alexeykuzmin): Skip the test.
+        // this.skip()
+        return
       }
+
+      crashReporter.start({
+        companyName: 'Umbrella Corporation',
+        submitURL: 'http://127.0.0.1/crashes',
+        uploadToServer: true
+      })
+      assert.equal(crashReporter.getUploadToServer(), true)
     })
-    it('returns false when uploadToServer is set to false', () => {
-      if (process.platform === 'darwin') {
-        crashReporter.start({
-          companyName: 'Umbrella Corporation',
-          submitURL: 'http://127.0.0.1/crashes',
-          uploadToServer: true
-        })
-        crashReporter.setUploadToServer(false)
-        assert.equal(crashReporter.getUploadToServer(), false)
+    it('returns false when uploadToServer is set to false', function () {
+      if (process.platform !== 'darwin') {
+        // FIXME(alexeykuzmin): Skip the test.
+        // this.skip()
+        return
       }
+
+      crashReporter.start({
+        companyName: 'Umbrella Corporation',
+        submitURL: 'http://127.0.0.1/crashes',
+        uploadToServer: true
+      })
+      crashReporter.setUploadToServer(false)
+      assert.equal(crashReporter.getUploadToServer(), false)
     })
   })
 
@@ -294,27 +303,35 @@ describe('crashReporter module', () => {
     it('throws an error when called from the renderer process', () => {
       assert.throws(() => require('electron').crashReporter.setUploadToServer('arg'))
     })
-    it('sets uploadToServer false when called with false', () => {
-      if (process.platform === 'darwin') {
-        crashReporter.start({
-          companyName: 'Umbrella Corporation',
-          submitURL: 'http://127.0.0.1/crashes',
-          uploadToServer: true
-        })
-        crashReporter.setUploadToServer(false)
-        assert.equal(crashReporter.getUploadToServer(), false)
+    it('sets uploadToServer false when called with false', function () {
+      if (process.platform !== 'darwin') {
+        // FIXME(alexeykuzmin): Skip the test.
+        // this.skip()
+        return
       }
+
+      crashReporter.start({
+        companyName: 'Umbrella Corporation',
+        submitURL: 'http://127.0.0.1/crashes',
+        uploadToServer: true
+      })
+      crashReporter.setUploadToServer(false)
+      assert.equal(crashReporter.getUploadToServer(), false)
     })
-    it('sets uploadToServer true when called with true', () => {
-      if (process.platform === 'darwin') {
-        crashReporter.start({
-          companyName: 'Umbrella Corporation',
-          submitURL: 'http://127.0.0.1/crashes',
-          uploadToServer: false
-        })
-        crashReporter.setUploadToServer(true)
-        assert.equal(crashReporter.getUploadToServer(), true)
+    it('sets uploadToServer true when called with true', function () {
+      if (process.platform !== 'darwin') {
+        // FIXME(alexeykuzmin): Skip the test.
+        // this.skip()
+        return
       }
+
+      crashReporter.start({
+        companyName: 'Umbrella Corporation',
+        submitURL: 'http://127.0.0.1/crashes',
+        uploadToServer: false
+      })
+      crashReporter.setUploadToServer(true)
+      assert.equal(crashReporter.getUploadToServer(), true)
     })
   })
 
@@ -328,9 +345,12 @@ describe('crashReporter module', () => {
       const parameters = crashReporter.getParameters()
       assert(typeof parameters === 'object')
     })
-    it('adds a parameter to current parameters', () => {
-      // only run on MacOS
-      if (process.platform !== 'darwin') return
+    it('adds a parameter to current parameters', function () {
+      if (process.platform !== 'darwin') {
+        // FIXME(alexeykuzmin): Skip the test.
+        // this.skip()
+        return
+      }
 
       crashReporter.start({
         companyName: 'Umbrella Corporation',
@@ -340,9 +360,12 @@ describe('crashReporter module', () => {
       crashReporter.addExtraParameter('hello', 'world')
       assert('hello' in crashReporter.getParameters())
     })
-    it('removes a parameter from current parameters', () => {
-      // only run on MacOS
-      if (process.platform !== 'darwin') return
+    it('removes a parameter from current parameters', function () {
+      if (process.platform !== 'darwin') {
+        // FIXME(alexeykuzmin): Skip the test.
+        // this.skip()
+        return
+      }
 
       crashReporter.start({
         companyName: 'Umbrella Corporation',

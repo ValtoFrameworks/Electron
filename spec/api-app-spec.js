@@ -113,8 +113,13 @@ describe('app module', () => {
   })
 
   describe('app.isInApplicationsFolder()', () => {
+    before(function () {
+      if (process.platform !== 'darwin') {
+        this.skip()
+      }
+    })
+
     it('should be false during tests', () => {
-      if (process.platform !== 'darwin') return
       assert.equal(app.isInApplicationsFolder(), false)
     })
   })
@@ -220,7 +225,11 @@ describe('app module', () => {
   })
 
   describe('app.setUserActivity(type, userInfo)', () => {
-    if (process.platform !== 'darwin') return
+    before(function () {
+      if (process.platform !== 'darwin') {
+        this.skip()
+      }
+    })
 
     it('sets the current activity', () => {
       app.setUserActivity('com.electron.testActivity', {testData: '123'})
@@ -229,9 +238,13 @@ describe('app module', () => {
   })
 
   xdescribe('app.importCertificate', () => {
-    if (process.platform !== 'linux') return
-
     var w = null
+
+    before(function () {
+      if (process.platform !== 'linux') {
+        this.skip()
+      }
+    })
 
     afterEach(() => closeWindow(w).then(() => { w = null }))
 
@@ -310,32 +323,69 @@ describe('app module', () => {
     })
   })
 
-  describe('app.setBadgeCount API', () => {
-    const shouldFail = process.platform === 'win32' ||
-                       (process.platform === 'linux' && !app.isUnityRunning())
+  describe('app.setBadgeCount', () => {
+    const platformIsNotSupported =
+        (process.platform === 'win32') ||
+        (process.platform === 'linux' && !app.isUnityRunning())
+    const platformIsSupported = !platformIsNotSupported
 
-    afterEach(() => {
+    const expectedBadgeCount = 42
+    let returnValue = null
+
+    beforeEach(() => {
+      returnValue = app.setBadgeCount(expectedBadgeCount)
+    })
+
+    after(() => {
+      // Remove the badge.
       app.setBadgeCount(0)
     })
 
-    it('returns false when failed', () => {
-      assert.equal(app.setBadgeCount(42), !shouldFail)
+    describe('on supported platform', () => {
+      before(function () {
+        if (platformIsNotSupported) {
+          this.skip()
+        }
+      })
+
+      it('returns true', () => {
+        assert.equal(returnValue, true)
+      })
+
+      it('sets a badge count', () => {
+        assert.equal(app.getBadgeCount(), expectedBadgeCount)
+      })
     })
 
-    it('should set a badge count', () => {
-      app.setBadgeCount(42)
-      assert.equal(app.getBadgeCount(), shouldFail ? 0 : 42)
+    describe('on unsupported platform', () => {
+      before(function () {
+        if (platformIsSupported) {
+          this.skip()
+        }
+      })
+
+      it('returns false', () => {
+        assert.equal(returnValue, false)
+      })
+
+      it('does not set a badge count', () => {
+        assert.equal(app.getBadgeCount(), 0)
+      })
     })
   })
 
   describe('app.get/setLoginItemSettings API', () => {
-    if (process.platform === 'linux') return
-
     const updateExe = path.resolve(path.dirname(process.execPath), '..', 'Update.exe')
     const processStartArgs = [
       '--processStart', `"${path.basename(process.execPath)}"`,
       '--process-start-args', `"--hidden"`
     ]
+
+    before(function () {
+      if (process.platform === 'linux') {
+        this.skip()
+      }
+    })
 
     beforeEach(() => {
       app.setLoginItemSettings({openAtLogin: false})
@@ -347,7 +397,7 @@ describe('app module', () => {
       app.setLoginItemSettings({openAtLogin: false, path: updateExe, args: processStartArgs})
     })
 
-    it('returns the login item status of the app', () => {
+    it('returns the login item status of the app', (done) => {
       app.setLoginItemSettings({openAtLogin: true})
       assert.deepEqual(app.getLoginItemSettings(), {
         openAtLogin: true,
@@ -360,24 +410,33 @@ describe('app module', () => {
       app.setLoginItemSettings({openAtLogin: true, openAsHidden: true})
       assert.deepEqual(app.getLoginItemSettings(), {
         openAtLogin: true,
-        openAsHidden: process.platform === 'darwin', // Only available on macOS
+        openAsHidden: process.platform === 'darwin' && !process.mas, // Only available on macOS
         wasOpenedAtLogin: false,
         wasOpenedAsHidden: false,
         restoreState: false
       })
 
       app.setLoginItemSettings({})
-      assert.deepEqual(app.getLoginItemSettings(), {
-        openAtLogin: false,
-        openAsHidden: false,
-        wasOpenedAtLogin: false,
-        wasOpenedAsHidden: false,
-        restoreState: false
-      })
+      // Wait because login item settings are not applied immediately in MAS build
+      const delay = process.mas ? 100 : 0
+      setTimeout(() => {
+        assert.deepEqual(app.getLoginItemSettings(), {
+          openAtLogin: false,
+          openAsHidden: false,
+          wasOpenedAtLogin: false,
+          wasOpenedAsHidden: false,
+          restoreState: false
+        })
+        done()
+      }, delay)
     })
 
-    it('allows you to pass a custom executable and arguments', () => {
-      if (process.platform !== 'win32') return
+    it('allows you to pass a custom executable and arguments', function () {
+      if (process.platform !== 'win32') {
+        // FIXME(alexeykuzmin): Skip the test.
+        // this.skip()
+        return
+      }
 
       app.setLoginItemSettings({openAtLogin: true, path: updateExe, args: processStartArgs})
 
@@ -411,7 +470,7 @@ describe('app module', () => {
     })
   })
 
-  xdescribe('select-client-certificate event', () => {
+  describe('select-client-certificate event', () => {
     let w = null
 
     beforeEach(() => {
@@ -438,14 +497,43 @@ describe('app module', () => {
   })
 
   describe('setAsDefaultProtocolClient(protocol, path, args)', () => {
-    if (process.platform !== 'win32') return
-
     const protocol = 'electron-test'
     const updateExe = path.resolve(path.dirname(process.execPath), '..', 'Update.exe')
     const processStartArgs = [
       '--processStart', `"${path.basename(process.execPath)}"`,
       '--process-start-args', `"--hidden"`
     ]
+
+    let Winreg
+    let classesKey
+
+    before(function () {
+      if (process.platform !== 'win32') {
+        this.skip()
+      } else {
+        Winreg = require('winreg')
+
+        classesKey = new Winreg({
+          hive: Winreg.HKCU,
+          key: '\\Software\\Classes\\'
+        })
+      }
+    })
+
+    after(function (done) {
+      if (process.platform !== 'win32') {
+        done()
+      } else {
+        const protocolKey = new Winreg({
+          hive: Winreg.HKCU,
+          key: `\\Software\\Classes\\${protocol}`
+        })
+
+        // The last test leaves the registry dirty,
+        // delete the protocol key for those of us who test at home
+        protocolKey.destroy(() => done())
+      }
+    })
 
     beforeEach(() => {
       app.removeAsDefaultProtocolClient(protocol)
@@ -471,18 +559,79 @@ describe('app module', () => {
       assert.equal(app.isDefaultProtocolClient(protocol, updateExe, processStartArgs), true)
       assert.equal(app.isDefaultProtocolClient(protocol), false)
     })
+
+    it('creates a registry entry for the protocol class', (done) => {
+      app.setAsDefaultProtocolClient(protocol)
+
+      classesKey.keys((error, keys) => {
+        if (error) {
+          throw error
+        }
+
+        const exists = !!keys.find((key) => key.key.includes(protocol))
+        assert.equal(exists, true)
+
+        done()
+      })
+    })
+
+    it('completely removes a registry entry for the protocol class', (done) => {
+      app.setAsDefaultProtocolClient(protocol)
+      app.removeAsDefaultProtocolClient(protocol)
+
+      classesKey.keys((error, keys) => {
+        if (error) {
+          throw error
+        }
+
+        const exists = !!keys.find((key) => key.key.includes(protocol))
+        assert.equal(exists, false)
+
+        done()
+      })
+    })
+
+    it('only unsets a class registry key if it contains other data', (done) => {
+      app.setAsDefaultProtocolClient(protocol)
+
+      const protocolKey = new Winreg({
+        hive: Winreg.HKCU,
+        key: `\\Software\\Classes\\${protocol}`
+      })
+
+      protocolKey.set('test-value', 'REG_BINARY', '123', () => {
+        app.removeAsDefaultProtocolClient(protocol)
+
+        classesKey.keys((error, keys) => {
+          if (error) {
+            throw error
+          }
+
+          const exists = !!keys.find((key) => key.key.includes(protocol))
+          assert.equal(exists, true)
+
+          done()
+        })
+      })
+    })
   })
 
   describe('getFileIcon() API', () => {
-    // FIXME Get these specs running on Linux CI
-    if (process.platform === 'linux' && isCI) return
-
     const iconPath = path.join(__dirname, 'fixtures/assets/icon.ico')
     const sizes = {
       small: 16,
       normal: 32,
       large: process.platform === 'win32' ? 32 : 48
     }
+
+    // (alexeykuzmin): `.skip()` called in `before`
+    // doesn't affect nested `describe`s.
+    beforeEach(function () {
+      // FIXME Get these specs running on Linux CI
+      if (process.platform === 'linux' && isCI) {
+        this.skip()
+      }
+    })
 
     it('fetches a non-empty icon', (done) => {
       app.getFileIcon(iconPath, (err, icon) => {
@@ -523,9 +672,13 @@ describe('app module', () => {
         })
       })
 
-      it('fetches a large icon', (done) => {
+      it('fetches a large icon', function (done) {
         // macOS does not support large icons
-        if (process.platform === 'darwin') return done()
+        if (process.platform === 'darwin') {
+          // FIXME(alexeykuzmin): Skip the test.
+          // this.skip()
+          return done()
+        }
 
         app.getFileIcon(iconPath, { size: 'large' }, function (err, icon) {
           const size = icon.getSize()
@@ -572,14 +725,18 @@ describe('app module', () => {
   })
 
   describe('mixed sandbox option', () => {
-    // FIXME Get these specs running on Linux
-    if (process.platform === 'linux') return
-
     let appProcess = null
     let server = null
     const socketPath = process.platform === 'win32' ? '\\\\.\\pipe\\electron-mixed-sandbox' : '/tmp/electron-mixed-sandbox'
 
-    beforeEach((done) => {
+    beforeEach(function (done) {
+      // XXX(alexeykuzmin): Calling `.skip()` inside a `before` hook
+      // doesn't affect nested `describe`s.
+      // FIXME Get these specs running on Linux
+      if (process.platform === 'linux') {
+        this.skip()
+      }
+
       fs.unlink(socketPath, () => {
         server = net.createServer()
         server.listen(socketPath)

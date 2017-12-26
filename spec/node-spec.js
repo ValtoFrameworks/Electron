@@ -130,31 +130,11 @@ describe('node feature', () => {
           done()
         })
       })
-
-      it('supports starting the v8 inspector with --inspect/--inspect-brk', (done) => {
-        child = ChildProcess.spawn(process.execPath, ['--inspect-brk', path.join(__dirname, 'fixtures', 'module', 'run-as-node.js')], {
-          env: {
-            ELECTRON_RUN_AS_NODE: true
-          }
-        })
-
-        let output = ''
-        child.stderr.on('data', (data) => {
-          output += data
-          if (output.trim().startsWith('Debugger listening on ws://')) done()
-        })
-
-        child.stdout.on('data', (data) => {
-          done(new Error(`Unexpected output: ${data.toString()}`))
-        })
-      })
     })
   })
 
   describe('contexts', () => {
     describe('setTimeout in fs callback', () => {
-      if (process.env.TRAVIS === 'true') return
-
       it('does not crash', (done) => {
         fs.readFile(__filename, () => {
           setTimeout(done, 0)
@@ -214,6 +194,50 @@ describe('node feature', () => {
     })
   })
 
+  describe('inspector', () => {
+    let child
+
+    afterEach(() => {
+      if (child != null) child.kill()
+    })
+
+    it('supports starting the v8 inspector with --inspect/--inspect-brk', (done) => {
+      child = ChildProcess.spawn(process.execPath, ['--inspect-brk', path.join(__dirname, 'fixtures', 'module', 'run-as-node.js')], {
+        env: {
+          ELECTRON_RUN_AS_NODE: true
+        }
+      })
+
+      let output = ''
+      child.stderr.on('data', (data) => {
+        output += data
+        if (output.trim().startsWith('Debugger listening on ws://')) done()
+      })
+
+      child.stdout.on('data', (data) => {
+        done(new Error(`Unexpected output: ${data.toString()}`))
+      })
+    })
+
+    it('supports js binding', (done) => {
+      child = ChildProcess.spawn(process.execPath, ['--inspect', path.join(__dirname, 'fixtures', 'module', 'inspector-binding.js')], {
+        env: {
+          ELECTRON_RUN_AS_NODE: true
+        },
+        stdio: ['ipc']
+      })
+
+      child.on('message', ({cmd, debuggerEnabled, secondSessionOpened, success}) => {
+        if (cmd === 'assert') {
+          assert.equal(debuggerEnabled, true)
+          assert.equal(secondSessionOpened, false)
+          assert.equal(success, true)
+          done()
+        }
+      })
+    })
+  })
+
   describe('message loop', () => {
     describe('process.nextTick', () => {
       it('emits the callback', (done) => {
@@ -245,7 +269,11 @@ describe('node feature', () => {
   })
 
   describe('net.connect', () => {
-    if (process.platform !== 'darwin') return
+    before(function () {
+      if (process.platform !== 'darwin') {
+        this.skip()
+      }
+    })
 
     it('emit error when connect to a socket path without listeners', (done) => {
       const socketPath = path.join(os.tmpdir(), 'atom-shell-test.sock')
@@ -266,7 +294,7 @@ describe('node feature', () => {
     it('can be created from WebKit external string', () => {
       const p = document.createElement('p')
       p.innerText = '闲云潭影日悠悠，物换星移几度秋'
-      const b = new Buffer(p.innerText)
+      const b = Buffer.from(p.innerText)
       assert.equal(b.toString(), '闲云潭影日悠悠，物换星移几度秋')
       assert.equal(Buffer.byteLength(p.innerText), 45)
     })
@@ -274,15 +302,15 @@ describe('node feature', () => {
     it('correctly parses external one-byte UTF8 string', () => {
       const p = document.createElement('p')
       p.innerText = 'Jøhänñéß'
-      const b = new Buffer(p.innerText)
+      const b = Buffer.from(p.innerText)
       assert.equal(b.toString(), 'Jøhänñéß')
       assert.equal(Buffer.byteLength(p.innerText), 13)
     })
 
     it('does not crash when creating large Buffers', () => {
-      let buffer = new Buffer(new Array(4096).join(' '))
+      let buffer = Buffer.from(new Array(4096).join(' '))
       assert.equal(buffer.length, 4095)
-      buffer = new Buffer(new Array(4097).join(' '))
+      buffer = Buffer.from(new Array(4097).join(' '))
       assert.equal(buffer.length, 4096)
     })
   })
@@ -290,6 +318,7 @@ describe('node feature', () => {
   describe('process.stdout', () => {
     it('does not throw an exception when accessed', () => {
       assert.doesNotThrow(() => {
+        // eslint-disable-next-line
         process.stdout
       })
     })
@@ -300,21 +329,31 @@ describe('node feature', () => {
       })
     })
 
-    it('should have isTTY defined on Mac and Linux', () => {
-      if (isCI) return
-
-      if (process.platform === 'win32') {
-        assert.equal(process.stdout.isTTY, undefined)
-      } else {
-        assert.equal(typeof process.stdout.isTTY, 'boolean')
+    it('should have isTTY defined on Mac and Linux', function () {
+      if (isCI || process.platform === 'win32') {
+        // FIXME(alexeykuzmin): Skip the test.
+        // this.skip()
+        return
       }
+
+      assert.equal(typeof process.stdout.isTTY, 'boolean')
+    })
+
+    it('should have isTTY undefined on Windows', function () {
+      if (isCI || process.platform !== 'win32') {
+        // FIXME(alexeykuzmin): Skip the test.
+        // this.skip()
+        return
+      }
+
+      assert.equal(process.stdout.isTTY, undefined)
     })
   })
 
   describe('process.stdin', () => {
     it('does not throw an exception when accessed', () => {
       assert.doesNotThrow(() => {
-        process.stdin
+        process.stdin // eslint-disable-line
       })
     })
 
@@ -336,7 +375,7 @@ describe('node feature', () => {
   })
 
   it('includes the electron version in process.versions', () => {
-    assert(/^\d+\.\d+\.\d+$/.test(process.versions.electron))
+    assert(/^\d+\.\d+\.\d+(\S*)?$/.test(process.versions.electron))
   })
 
   it('includes the chrome version in process.versions', () => {

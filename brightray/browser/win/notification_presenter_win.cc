@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "base/environment.h"
 #include "base/files/file_util.h"
 #include "base/md5.h"
 #include "base/strings/utf_string_conversions.h"
@@ -16,7 +17,6 @@
 #include "base/win/windows_version.h"
 #include "brightray/browser/win/notification_presenter_win7.h"
 #include "brightray/browser/win/windows_toast_notification.h"
-#include "content/public/browser/desktop_notification_delegate.h"
 #include "content/public/common/platform_notification_data.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/gfx/codec/png_codec.h"
@@ -26,6 +26,10 @@
 namespace brightray {
 
 namespace {
+
+bool IsDebuggingNotifications() {
+  return base::Environment::Create()->HasVar("ELECTRON_DEBUG_NOTIFICATIONS");
+}
 
 bool SaveIconToPath(const SkBitmap& bitmap, const base::FilePath& path) {
   std::vector<unsigned char> png_data;
@@ -50,6 +54,10 @@ NotificationPresenter* NotificationPresenter::Create() {
       new NotificationPresenterWin);
   if (!presenter->Init())
     return nullptr;
+
+  if (IsDebuggingNotifications())
+    LOG(INFO) << "Successfully created Windows notifications presenter";
+
   return presenter.release();
 }
 

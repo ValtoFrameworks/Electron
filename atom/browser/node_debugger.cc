@@ -13,13 +13,14 @@
 
 namespace atom {
 
-NodeDebugger::NodeDebugger(node::Environment* env) : env_(env) {
+NodeDebugger::NodeDebugger(node::Environment* env)
+    : env_(env) {
 }
 
 NodeDebugger::~NodeDebugger() {
 }
 
-void NodeDebugger::Start() {
+void NodeDebugger::Start(node::NodePlatform* platform) {
   auto inspector = env_->inspector_agent();
   if (inspector == nullptr)
     return;
@@ -34,18 +35,14 @@ void NodeDebugger::Start() {
   }
 
   if (options.inspector_enabled()) {
-    // Use custom platform since the gin platform does not work correctly
-    // with node's inspector agent
-    platform_.reset(v8::platform::CreateDefaultPlatform());
-
     // Set process._debugWaitConnect if --inspect-brk was specified to stop
     // the debugger on the first line
     if (options.wait_for_connect()) {
       mate::Dictionary process(env_->isolate(), env_->process_object());
-      process.Set("_debugWaitConnect", true);
+      process.Set("_breakFirstLine", true);
     }
 
-    inspector->Start(platform_.get(), nullptr, options);
+    inspector->Start(platform, nullptr, options);
   }
 }
 
