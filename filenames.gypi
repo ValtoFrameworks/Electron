@@ -63,6 +63,7 @@
       'lib/renderer/init.js',
       'lib/renderer/inspector.js',
       'lib/renderer/override.js',
+      'lib/renderer/security-warnings.js',
       'lib/renderer/window-setup.js',
       'lib/renderer/web-view/guest-view-internal.js',
       'lib/renderer/web-view/web-view.js',
@@ -99,8 +100,8 @@
       'atom/app/atom_main_delegate.cc',
       'atom/app/atom_main_delegate.h',
       'atom/app/atom_main_delegate_mac.mm',
-      'atom/app/node_main.cc',
-      'atom/app/node_main.h',
+      'atom/app/command_line_args.cc',
+      'atom/app/command_line_args.h',
       'atom/app/uv_task_runner.cc',
       'atom/app/uv_task_runner.h',
       'atom/browser/api/atom_api_app.cc',
@@ -160,8 +161,8 @@
       'atom/browser/api/atom_api_web_request.cc',
       'atom/browser/api/atom_api_web_request.h',
       'atom/browser/api/atom_api_web_view_manager.cc',
-      'atom/browser/api/atom_api_window.cc',
-      'atom/browser/api/atom_api_window.h',
+      'atom/browser/api/atom_api_browser_window.cc',
+      'atom/browser/api/atom_api_browser_window.h',
       'atom/browser/api/event.cc',
       'atom/browser/api/event.h',
       'atom/browser/api/event_emitter.cc',
@@ -260,8 +261,6 @@
       'atom/browser/net/asar/url_request_asar_job.h',
       'atom/browser/net/atom_cert_verifier.cc',
       'atom/browser/net/atom_cert_verifier.h',
-      'atom/browser/net/atom_cookie_delegate.cc',
-      'atom/browser/net/atom_cookie_delegate.h',
       'atom/browser/net/atom_network_delegate.cc',
       'atom/browser/net/atom_network_delegate.h',
       'atom/browser/net/atom_url_request.cc',
@@ -608,7 +607,6 @@
       'chromium_src/chrome/common/chrome_paths_linux.cc',
       'chromium_src/chrome/common/chrome_paths_mac.mm',
       'chromium_src/chrome/common/chrome_paths_win.cc',
-      'chromium_src/chrome/common/chrome_utility_messages.h',
       'chromium_src/chrome/common/pref_names.cc',
       'chromium_src/chrome/common/pref_names.h',
       'chromium_src/chrome/common/print_messages.cc',
@@ -645,7 +643,6 @@
       'chromium_src/chrome/renderer/tts_dispatcher.cc',
       'chromium_src/chrome/renderer/tts_dispatcher.h',
       'chromium_src/chrome/utility/utility_message_handler.h',
-      'chromium_src/components/pdf/common/pdf_messages.h',
       'chromium_src/components/pdf/renderer/pepper_pdf_host.cc',
       'chromium_src/components/pdf/renderer/pepper_pdf_host.h',
       'chromium_src/extensions/browser/app_window/size_constraints.cc',
@@ -733,6 +730,17 @@
           'atom/browser/osr/osr_view_proxy.h',
         ],
       }],  # enable_osr==1
+      ['enable_run_as_node', {
+        'lib_sources': [
+          'atom/app/node_main.cc',
+          'atom/app/node_main.h',
+        ],
+      }],  # enable_run_as_node
+      ['mas_build==1', {
+        'lib_sources': [
+          'atom/browser/api/atom_api_app_mas.mm',
+        ],
+      }],  # mas_build==1
     ],
   },
 }
