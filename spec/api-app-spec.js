@@ -44,7 +44,7 @@ describe('app module', () => {
   let server, secureUrl
   const certPath = path.join(__dirname, 'fixtures', 'certificates')
 
-  before(() => {
+  before((done) => {
     const options = {
       key: fs.readFileSync(path.join(certPath, 'server.key')),
       cert: fs.readFileSync(path.join(certPath, 'server.pem')),
@@ -69,11 +69,12 @@ describe('app module', () => {
     server.listen(0, '127.0.0.1', () => {
       const port = server.address().port
       secureUrl = `https://127.0.0.1:${port}`
+      done()
     })
   })
 
-  after(() => {
-    server.close()
+  after((done) => {
+    server.close(() => done())
   })
 
   describe('app.getVersion()', () => {
@@ -158,21 +159,23 @@ describe('app module', () => {
       })
     })
 
-    it('exits gracefully on macos', function (done) {
-      if (process.platform !== 'darwin') {
+    it('exits gracefully', function (done) {
+      if (!['darwin', 'linux'].includes(process.platform)) {
         this.skip()
       }
-      const appPath = path.join(__dirname, 'fixtures', 'api', 'singleton')
+
       const electronPath = remote.getGlobal('process').execPath
+      const appPath = path.join(__dirname, 'fixtures', 'api', 'singleton')
       appProcess = ChildProcess.spawn(electronPath, [appPath])
-      appProcess.stdout.once('data', () => {
-        // The apple script will try to terminate the app
-        // If there's an error terminating the app, then it will print to stderr
-        ChildProcess.exec('osascript -e \'quit app "Electron"\'', (err, stdout, stderr) => {
-          assert(!err)
-          assert(!stderr.trim())
-          done()
-        })
+
+      // Singleton will send us greeting data to let us know it's running.
+      // After that, ask it to exit gracefully and confirm that it does.
+      appProcess.stdout.on('data', (data) => appProcess.kill())
+      appProcess.on('exit', (code, sig) => {
+        let message = ['code:', code, 'sig:', sig].join('\n')
+        assert.equal(code, 0, message)
+        assert.equal(sig, null, message)
+        done()
       })
     })
   })
@@ -491,6 +494,12 @@ describe('app module', () => {
   describe('select-client-certificate event', () => {
     let w = null
 
+    before(function () {
+      if (process.platform === 'linux') {
+        this.skip()
+      }
+    })
+
     beforeEach(() => {
       w = new BrowserWindow({
         show: false,
@@ -505,7 +514,6 @@ describe('app module', () => {
     it('can respond with empty certificate list', (done) => {
       w.webContents.on('did-finish-load', () => {
         assert.equal(w.webContents.getTitle(), 'denied')
-        server.close()
         done()
       })
 

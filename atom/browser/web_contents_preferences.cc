@@ -48,12 +48,44 @@ WebContentsPreferences::WebContentsPreferences(
   web_contents->SetUserData(UserDataKey(), base::WrapUnique(this));
 
   instances_.push_back(this);
+
+  // Set WebPreferences defaults onto the JS object
+  SetDefaultBoolIfUndefined("plugins", false);
+  SetDefaultBoolIfUndefined(options::kExperimentalFeatures, false);
+  SetDefaultBoolIfUndefined(options::kExperimentalCanvasFeatures, false);
+  bool node = SetDefaultBoolIfUndefined(options::kNodeIntegration, true);
+  SetDefaultBoolIfUndefined(options::kNodeIntegrationInWorker, false);
+  SetDefaultBoolIfUndefined(options::kWebviewTag, node);
+  SetDefaultBoolIfUndefined("sandbox", false);
+  SetDefaultBoolIfUndefined("nativeWindowOpen", false);
+  SetDefaultBoolIfUndefined(options::kContextIsolation, false);
+  SetDefaultBoolIfUndefined("javascript", true);
+  SetDefaultBoolIfUndefined("images", true);
+  SetDefaultBoolIfUndefined("textAreasAreResizable", true);
+  SetDefaultBoolIfUndefined("webgl", true);
+  SetDefaultBoolIfUndefined("webSecurity", true);
+  SetDefaultBoolIfUndefined("allowRunningInsecureContent", false);
+  #if defined(OS_MACOSX)
+  SetDefaultBoolIfUndefined(options::kScrollBounce, false);
+  #endif
+  SetDefaultBoolIfUndefined("offscreen", false);
+  last_web_preferences_.MergeDictionary(&web_preferences_);
 }
 
 WebContentsPreferences::~WebContentsPreferences() {
   instances_.erase(
       std::remove(instances_.begin(), instances_.end(), this),
       instances_.end());
+}
+
+bool WebContentsPreferences::SetDefaultBoolIfUndefined(const std::string key,
+                                                       bool val) {
+  bool existing;
+  if (!web_preferences_.GetBoolean(key, &existing)) {
+    web_preferences_.SetBoolean(key, val);
+    return val;
+  }
+  return existing;
 }
 
 void WebContentsPreferences::Merge(const base::DictionaryValue& extend) {
@@ -79,6 +111,12 @@ void WebContentsPreferences::AppendExtraCommandLineSwitches(
     return;
 
   base::DictionaryValue& web_preferences = self->web_preferences_;
+
+  // We are appending args to a webContents so let's save the current state
+  // of our preferences object so that during the lifetime of the WebContents
+  // we can fetch the options used to initally configure the WebContents
+  self->last_web_preferences_.Clear();
+  self->last_web_preferences_.MergeDictionary(&web_preferences);
 
   bool b;
   // Check if plugins are enabled.
@@ -209,11 +247,14 @@ void WebContentsPreferences::AppendExtraCommandLineSwitches(
     if (manager) {
       auto embedder = manager->GetEmbedder(guest_instance_id);
       if (embedder) {
-        auto window = NativeWindow::FromWebContents(embedder);
-        if (window) {
-          const bool visible = window->IsVisible() && !window->IsMinimized();
-          if (!visible) {
-            command_line->AppendSwitch(switches::kHiddenPage);
+        auto* relay = NativeWindowRelay::FromWebContents(web_contents);
+        if (relay) {
+          auto* window = relay->window.get();
+          if (window) {
+            const bool visible = window->IsVisible() && !window->IsMinimized();
+            if (!visible) {
+              command_line->AppendSwitch(switches::kHiddenPage);
+            }
           }
         }
       }
@@ -299,6 +340,15 @@ bool WebContentsPreferences::GetInteger(const std::string& attributeName,
     return base::StringToInt(stringValue, intValue);
 
   return false;
+}
+
+bool WebContentsPreferences::GetString(const std::string& attribute_name,
+                                       std::string* string_value,
+                                       content::WebContents* web_contents) {
+  WebContentsPreferences* self = FromWebContents(web_contents);
+  if (!self)
+    return false;
+  return self->web_preferences()->GetString(attribute_name, string_value);
 }
 
 }  // namespace atom

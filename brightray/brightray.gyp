@@ -161,7 +161,6 @@
                   '-ldl',
                   '-lresolv',
                   '-lfontconfig',
-                  '-lfreetype',
                   '-lexpat',
                 ],
               },
@@ -170,14 +169,6 @@
               'link_settings': {
                 'libraries!': [
                   '<(libchromiumcontent_dir)/libdesktop_capture_differ_sse2.a',
-                ],
-              },
-            }],
-            # On ARM64 libchromiumcontent always links to system libfreetype
-            ['target_arch=="arm64"', {
-              'link_settings': {
-                'libraries': [
-                  '-lfreetype',
                 ],
               },
             }],
@@ -284,6 +275,44 @@
           ]
         }],  # OS=="mac"
         ['OS=="win"', {
+          'link_settings': {
+            'msvs_settings': {
+              'VCLinkerTool': {
+                'AdditionalDependencies': [
+                  'delayimp.lib',
+                ],
+                'DelayLoadDLLs': [
+                  'wtsapi32.dll',
+                  # content_common.gypi:
+                  'd3d9.dll',
+                  'd3d11.dll',
+                  'dxva2.dll',
+                  # media.gyp:
+                  'mf.dll',
+                  'mfplat.dll',
+                  'mfreadwrite.dll',
+                  # bluetooth.gyp:
+                  'BluetoothApis.dll',
+                  'Bthprops.cpl',
+                  'setupapi.dll',
+                  # base.gyp:
+                  'cfgmgr32.dll',
+                  'powrprof.dll',
+                  'setupapi.dll',
+                  # net_common.gypi:
+                  'crypt32.dll',
+                  'dhcpcsvc.dll',
+                  'rpcrt4.dll',
+                  'secur32.dll',
+                  'urlmon.dll',
+                  'winhttp.dll',
+                  # windows runtime
+                  'API-MS-WIN-CORE-WINRT-L1-1-0.DLL',
+                  'API-MS-WIN-CORE-WINRT-STRING-L1-1-0.DLL',
+                ],
+              },
+            },
+          },
           'conditions': [
             ['libchromiumcontent_component', {
               'link_settings': {
@@ -362,7 +391,6 @@
                     'AdditionalDependencies': [
                       'advapi32.lib',
                       'dbghelp.lib',
-                      'delayimp.lib',
                       'dwmapi.lib',
                       'gdi32.lib',
                       'netapi32.lib',
@@ -391,35 +419,6 @@
                       'dwrite.lib',
                       # skia/BUILD.gn:
                       'fontsub.lib',
-                    ],
-                    'DelayLoadDLLs': [
-                      'wtsapi32.dll',
-                      # content_common.gypi:
-                      'd3d9.dll',
-                      'd3d11.dll',
-                      'dxva2.dll',
-                      # media.gyp:
-                      'mf.dll',
-                      'mfplat.dll',
-                      'mfreadwrite.dll',
-                      # bluetooth.gyp:
-                      'BluetoothApis.dll',
-                      'Bthprops.cpl',
-                      'setupapi.dll',
-                      # base.gyp:
-                      'cfgmgr32.dll',
-                      'powrprof.dll',
-                      'setupapi.dll',
-                      # net_common.gypi:
-                      'crypt32.dll',
-                      'dhcpcsvc.dll',
-                      'rpcrt4.dll',
-                      'secur32.dll',
-                      'urlmon.dll',
-                      'winhttp.dll',
-                      # windows runtime
-                      'API-MS-WIN-CORE-WINRT-L1-1-0.DLL',
-                      'API-MS-WIN-CORE-WINRT-STRING-L1-1-0.DLL',
                     ],
                   },
                 },

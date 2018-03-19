@@ -1186,7 +1186,24 @@ describe('BrowserWindow module', () => {
         w.loadURL('file://' + path.join(fixtures, 'api', 'preload.html'))
       })
 
-      it('exposes "exit" event to preload script', (done) => {
+      it('exposes ipcRenderer to preload script (path has special chars)', function (done) {
+        const preloadSpecialChars = path.join(fixtures, 'module', 'preload-sandboxæø åü.js')
+        ipcMain.once('answer', function (event, test) {
+          assert.equal(test, 'preload')
+          done()
+        })
+        w.destroy()
+        w = new BrowserWindow({
+          show: false,
+          webPreferences: {
+            sandbox: true,
+            preload: preloadSpecialChars
+          }
+        })
+        w.loadURL('file://' + path.join(fixtures, 'api', 'preload.html'))
+      })
+
+      it('exposes "exit" event to preload script', function (done) {
         w.destroy()
         w = new BrowserWindow({
           show: false,
@@ -1521,6 +1538,23 @@ describe('BrowserWindow module', () => {
           assert.equal(arg, 'hi child window')
           done()
         })
+      })
+
+      it('validate process.env access in sandbox renderer', (done) => {
+        ipcMain.once('answer', function (event, test) {
+          assert.equal(test, 'foo')
+          done()
+        })
+        remote.process.env.sandboxmain = 'foo'
+        w.destroy()
+        w = new BrowserWindow({
+          show: false,
+          webPreferences: {
+            sandbox: true,
+            preload: preload
+          }
+        })
+        w.loadURL('file://' + path.join(fixtures, 'api', 'preload.html'))
       })
     })
 
@@ -2965,7 +2999,7 @@ describe('BrowserWindow module', () => {
     })
     it('enables context isolation on child windows', (done) => {
       app.once('browser-window-created', (event, window) => {
-        assert.equal(window.webContents.getWebPreferences().contextIsolation, true)
+        assert.equal(window.webContents.getLastWebPreferences().contextIsolation, true)
         done()
       })
       w.loadURL(`file://${fixtures}/pages/window-open.html`)

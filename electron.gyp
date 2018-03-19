@@ -4,7 +4,7 @@
     'product_name%': 'Electron',
     'company_name%': 'GitHub, Inc',
     'company_abbr%': 'github',
-    'version%': '1.8.2-beta.2',
+    'version%': '0.0.0-dev',
     'js2c_input_dir': '<(SHARED_INTERMEDIATE_DIR)/js2c',
   },
   'includes': [
@@ -245,7 +245,7 @@
         'atom_js2c',
         'vendor/pdf_viewer/pdf_viewer.gyp:pdf_viewer',
         'brightray/brightray.gyp:brightray',
-        'vendor/node/node.gyp:node',
+        'vendor/node/node.gyp:node_lib',
       ],
       'defines': [
         # We need to access internal implementations of Node.
