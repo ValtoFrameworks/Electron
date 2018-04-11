@@ -221,9 +221,8 @@ NativeImage::NativeImage(v8::Isolate* isolate, const gfx::Image& image)
   Init(isolate);
   if (image_.HasRepresentation(gfx::Image::kImageRepSkia)) {
     isolate->AdjustAmountOfExternalAllocatedMemory(
-      image_.ToImageSkia()->bitmap()->computeSize64());
+      image_.ToImageSkia()->bitmap()->computeByteSize());
   }
-  MarkHighMemoryUsage();
 }
 
 #if defined(OS_WIN)
@@ -236,16 +235,15 @@ NativeImage::NativeImage(v8::Isolate* isolate, const base::FilePath& hicon_path)
   Init(isolate);
   if (image_.HasRepresentation(gfx::Image::kImageRepSkia)) {
     isolate->AdjustAmountOfExternalAllocatedMemory(
-      image_.ToImageSkia()->bitmap()->computeSize64());
+      image_.ToImageSkia()->bitmap()->computeByteSize());
   }
-  MarkHighMemoryUsage();
 }
 #endif
 
 NativeImage::~NativeImage() {
   if (image_.HasRepresentation(gfx::Image::kImageRepSkia)) {
     isolate()->AdjustAmountOfExternalAllocatedMemory(
-      - image_.ToImageSkia()->bitmap()->computeSize64());
+      -static_cast<int64_t>(image_.ToImageSkia()->bitmap()->computeByteSize()));
   }
 }
 
@@ -302,7 +300,7 @@ v8::Local<v8::Value> NativeImage::ToBitmap(mate::Arguments* args) {
     return node::Buffer::New(args->isolate(), 0).ToLocalChecked();
   return node::Buffer::Copy(args->isolate(),
                             reinterpret_cast<const char*>(ref->pixels()),
-                            bitmap.getSafeSize()).ToLocalChecked();
+                            bitmap.computeByteSize()).ToLocalChecked();
 }
 
 v8::Local<v8::Value> NativeImage::ToJPEG(v8::Isolate* isolate, int quality) {
@@ -340,7 +338,7 @@ v8::Local<v8::Value> NativeImage::GetBitmap(mate::Arguments* args) {
     return node::Buffer::New(args->isolate(), 0).ToLocalChecked();
   return node::Buffer::New(args->isolate(),
                            reinterpret_cast<char*>(ref->pixels()),
-                           bitmap.getSafeSize(),
+                           bitmap.computeByteSize(),
                            &Noop,
                            nullptr).ToLocalChecked();
 }

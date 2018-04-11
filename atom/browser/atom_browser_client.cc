@@ -10,6 +10,7 @@
 
 #include "atom/browser/api/atom_api_app.h"
 #include "atom/browser/api/atom_api_protocol.h"
+#include "atom/browser/api/atom_api_web_contents.h"
 #include "atom/browser/atom_browser_context.h"
 #include "atom/browser/atom_browser_main_parts.h"
 #include "atom/browser/atom_quota_permission_context.h"
@@ -21,8 +22,10 @@
 #include "atom/browser/web_contents_permission_helper.h"
 #include "atom/browser/web_contents_preferences.h"
 #include "atom/browser/window_list.h"
+#include "atom/common/google_api_key.h"
 #include "atom/common/options_switches.h"
 #include "base/command_line.h"
+#include "base/environment.h"
 #include "base/files/file_util.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -49,6 +52,8 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "v8/include/v8.h"
 
+using content::BrowserThread;
+
 namespace atom {
 
 namespace {
@@ -59,7 +64,16 @@ bool g_suppress_renderer_process_restart = false;
 // Custom schemes to be registered to handle service worker.
 std::string g_custom_service_worker_schemes = "";
 
-void Noop(scoped_refptr<content::SiteInstance>) {
+bool IsSameWebSite(content::BrowserContext* browser_context,
+                   const GURL& src_url,
+                   const GURL& dest_url) {
+  return content::SiteInstance::IsSameWebSite(browser_context, src_url,
+                                              dest_url) ||
+         // `IsSameWebSite` doesn't seem to work for some URIs such as `file:`,
+         // handle these scenarios by comparing only the site as defined by
+         // `GetSiteForURL`.
+         content::SiteInstance::GetSiteForURL(browser_context, dest_url) ==
+             src_url;
 }
 
 }  // namespace
@@ -74,8 +88,7 @@ void AtomBrowserClient::SetCustomServiceWorkerSchemes(
   g_custom_service_worker_schemes = base::JoinString(schemes, ",");
 }
 
-AtomBrowserClient::AtomBrowserClient() : delegate_(nullptr) {
-}
+AtomBrowserClient::AtomBrowserClient() : delegate_(nullptr) {}
 
 AtomBrowserClient::~AtomBrowserClient() {
 }
@@ -121,12 +134,7 @@ bool AtomBrowserClient::ShouldCreateNewSiteInstance(
 
   // Create new a SiteInstance if navigating to a different site.
   auto src_url = current_instance->GetSiteURL();
-  return
-      !content::SiteInstance::IsSameWebSite(browser_context, src_url, url) &&
-      // `IsSameWebSite` doesn't seem to work for some URIs such as `file:`,
-      // handle these scenarios by comparing only the site as defined by
-      // `GetSiteForURL`.
-      content::SiteInstance::GetSiteForURL(browser_context, url) != src_url;
+  return !IsSameWebSite(browser_context, src_url, url);
 }
 
 void AtomBrowserClient::AddProcessPreferences(
@@ -169,17 +177,15 @@ void AtomBrowserClient::RenderProcessWillLaunch(
   host->AddFilter(
       new WidevineCdmMessageFilter(process_id, host->GetBrowserContext()));
 
-  content::WebContents* web_contents = GetWebContentsFromProcessID(process_id);
-  ProcessPreferences process_prefs;
-  process_prefs.sandbox =
-      WebContentsPreferences::IsPreferenceEnabled("sandbox", web_contents);
-  process_prefs.native_window_open =
-      WebContentsPreferences::IsPreferenceEnabled("nativeWindowOpen",
-                                                  web_contents);
-  process_prefs.disable_popups =
-      WebContentsPreferences::IsPreferenceEnabled("disablePopups",
-                                                  web_contents);
-  AddProcessPreferences(host->GetID(), process_prefs);
+  ProcessPreferences prefs;
+  auto* web_preferences = WebContentsPreferences::From(
+      GetWebContentsFromProcessID(process_id));
+  if (web_preferences) {
+    prefs.sandbox = web_preferences->IsEnabled("sandbox");
+    prefs.native_window_open = web_preferences->IsEnabled("nativeWindowOpen");
+    prefs.disable_popups = web_preferences->IsEnabled("disablePopups");
+  }
+  AddProcessPreferences(host->GetID(), prefs);
   // ensure the ProcessPreferences is removed later
   host->AddObserver(this);
 }
@@ -202,70 +208,71 @@ void AtomBrowserClient::OverrideWebkitPrefs(
   prefs->application_cache_enabled = true;
   prefs->allow_universal_access_from_file_urls = true;
   prefs->allow_file_access_from_file_urls = true;
-  prefs->experimental_webgl_enabled = true;
+  prefs->webgl1_enabled = true;
+  prefs->webgl2_enabled = true;
   prefs->allow_running_insecure_content = false;
 
   // Custom preferences of guest page.
-  auto web_contents = content::WebContents::FromRenderViewHost(host);
-  WebContentsPreferences::OverrideWebkitPrefs(web_contents, prefs);
+  auto* web_contents = content::WebContents::FromRenderViewHost(host);
+  auto* web_preferences = WebContentsPreferences::From(web_contents);
+  if (web_preferences)
+    web_preferences->OverrideWebkitPrefs(prefs);
 }
 
 void AtomBrowserClient::OverrideSiteInstanceForNavigation(
     content::RenderFrameHost* rfh,
     content::BrowserContext* browser_context,
-    content::SiteInstance* current_instance,
     const GURL& url,
+    bool has_request_started,
+    content::SiteInstance* candidate_instance,
     content::SiteInstance** new_instance) {
   if (g_suppress_renderer_process_restart) {
     g_suppress_renderer_process_restart = false;
     return;
   }
 
+  content::SiteInstance* current_instance = rfh->GetSiteInstance();
   if (!ShouldCreateNewSiteInstance(rfh, browser_context, current_instance, url))
     return;
-
-  bool is_new_instance = true;
-  scoped_refptr<content::SiteInstance> site_instance;
 
   // Do we have an affinity site to manage ?
   std::string affinity;
   auto* web_contents = content::WebContents::FromRenderFrameHost(rfh);
-  auto* web_preferences = web_contents ?
-      WebContentsPreferences::FromWebContents(web_contents) : nullptr;
+  auto* web_preferences = WebContentsPreferences::From(web_contents);
   if (web_preferences &&
-      web_preferences->web_preferences()->GetString("affinity", &affinity) &&
+      web_preferences->dict()->GetString("affinity", &affinity) &&
       !affinity.empty()) {
     affinity = base::ToLowerASCII(affinity);
     auto iter = site_per_affinities.find(affinity);
-    if (iter != site_per_affinities.end()) {
-      site_instance = iter->second;
-      is_new_instance = false;
+    GURL dest_site = content::SiteInstance::GetSiteForURL(browser_context, url);
+    if (iter != site_per_affinities.end() &&
+        IsSameWebSite(browser_context, iter->second->GetSiteURL(), dest_site)) {
+      *new_instance = iter->second;
     } else {
-      // We must not provide the url.
-      // This site is "isolated" and must not be taken into account
-      // when Chromium looking at a candidate for an url.
-      site_instance = content::SiteInstance::Create(
-          browser_context);
-      site_per_affinities[affinity] = site_instance.get();
+      site_per_affinities[affinity] = candidate_instance;
+      *new_instance = candidate_instance;
+      // Remember the original web contents for the pending renderer process.
+      auto pending_process = candidate_instance->GetProcess();
+      pending_processes_[pending_process->GetID()] = web_contents;
     }
   } else {
-    site_instance = content::SiteInstance::CreateForURL(
-        browser_context,
-        url);
-  }
-  *new_instance = site_instance.get();
+    // OverrideSiteInstanceForNavigation will be called more than once during a
+    // navigation (currently twice, on request and when it's about to commit in
+    // the renderer), look at RenderFrameHostManager::GetFrameHostForNavigation.
+    // In the default mode we should resuse the same site instance until the
+    // request commits otherwise it will get destroyed. Currently there is no
+    // unique lifetime tracker for a navigation request during site instance
+    // creation. We check for the state of the request, which should be one of
+    // (WAITING_FOR_RENDERER_RESPONSE, STARTED, RESPONSE_STARTED, FAILED) along
+    // with the availability of a speculative render frame host.
+    if (has_request_started) {
+      *new_instance = current_instance;
+      return;
+    }
 
-  if (is_new_instance) {
-    // Make sure the |site_instance| is not freed
-    // when this function returns.
-    // FIXME(zcbenz): We should adjust
-    // OverrideSiteInstanceForNavigation's interface to solve this.
-    content::BrowserThread::PostTask(
-        content::BrowserThread::UI, FROM_HERE,
-        base::Bind(&Noop, base::RetainedRef(site_instance)));
-
+    *new_instance = candidate_instance;
     // Remember the original web contents for the pending renderer process.
-    auto pending_process = site_instance->GetProcess();
+    auto pending_process = candidate_instance->GetProcess();
     pending_processes_[pending_process->GetID()] = web_contents;
   }
 }
@@ -318,10 +325,16 @@ void AtomBrowserClient::AppendExtraCommandLineSwitches(
 
   content::WebContents* web_contents = GetWebContentsFromProcessID(process_id);
   if (web_contents) {
-    WebContentsPreferences::AppendExtraCommandLineSwitches(
-        web_contents, command_line);
+    auto* web_preferences = WebContentsPreferences::From(web_contents);
+    if (web_preferences)
+      web_preferences->AppendCommandLineSwitches(command_line);
     SessionPreferences::AppendExtraCommandLineSwitches(
         web_contents->GetBrowserContext(), command_line);
+
+    auto context_id = atom::api::WebContents::GetIDForContents(
+      web_contents);
+    command_line->AppendSwitchASCII(switches::kContextId,
+      base::IntToString(context_id));
   }
 }
 
@@ -329,6 +342,24 @@ void AtomBrowserClient::DidCreatePpapiPlugin(
     content::BrowserPpapiHost* host) {
   host->GetPpapiHost()->AddHostFactoryFilter(
       base::WrapUnique(new chrome::ChromeBrowserPepperHostFactory(host)));
+}
+
+void AtomBrowserClient::GetGeolocationRequestContext(
+    base::OnceCallback<void(scoped_refptr<net::URLRequestContextGetter>)>
+        callback) {
+  auto io_thread = AtomBrowserMainParts::Get()->io_thread();
+  auto context = io_thread->GetRequestContext();
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE,
+      base::BindOnce(std::move(callback), base::RetainedRef(context)));
+}
+
+std::string AtomBrowserClient::GetGeolocationApiKey() {
+  std::unique_ptr<base::Environment> env(base::Environment::Create());
+  std::string api_key;
+  if (!env->GetVar("GOOGLE_API_KEY", &api_key))
+    api_key = GOOGLEAPIS_API_KEY;
+  return api_key;
 }
 
 content::QuotaPermissionContext*
@@ -342,7 +373,6 @@ void AtomBrowserClient::AllowCertificateError(
     const net::SSLInfo& ssl_info,
     const GURL& request_url,
     content::ResourceType resource_type,
-    bool overridable,
     bool strict_enforcement,
     bool expired_previous_decision,
     const base::Callback<void(content::CertificateRequestResultType)>&
@@ -350,7 +380,7 @@ void AtomBrowserClient::AllowCertificateError(
   if (delegate_) {
     delegate_->AllowCertificateError(
         web_contents, cert_error, ssl_info, request_url,
-        resource_type, overridable, strict_enforcement,
+        resource_type, strict_enforcement,
         expired_previous_decision, callback);
   }
 }
@@ -390,7 +420,7 @@ bool AtomBrowserClient::CanCreateWindow(
     bool user_gesture,
     bool opener_suppressed,
     bool* no_javascript_access) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   int opener_render_process_id = opener->GetProcess()->GetID();
 

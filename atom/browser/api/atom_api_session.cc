@@ -31,11 +31,11 @@
 #include "base/strings/string_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "brightray/browser/media/media_device_id_salt.h"
-#include "brightray/browser/net/devtools_network_conditions.h"
-#include "brightray/browser/net/devtools_network_controller_handle.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/common/pref_names.h"
 #include "components/prefs/pref_service.h"
+#include "content/common/devtools/devtools_network_conditions.h"
+#include "content/common/devtools/devtools_network_controller.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/download_manager_delegate.h"
 #include "content/public/browser/storage_partition.h"
@@ -342,7 +342,7 @@ void DoCacheActionInIO(
     on_get_backend.Run(net::OK);
 }
 
-void SetProxyInIO(net::URLRequestContextGetter* getter,
+void SetProxyInIO(scoped_refptr<net::URLRequestContextGetter> getter,
                   const net::ProxyConfig& config,
                   const base::Closure& callback) {
   auto proxy_service = getter->GetURLRequestContext()->proxy_service();
@@ -452,6 +452,32 @@ void SetDevToolsNetworkEmulationClientIdInIO(
   network_delegate->SetDevToolsNetworkEmulationClientId(client_id);
 }
 
+// Clear protocol handlers in IO thread.
+void ClearJobFactoryInIO(
+    scoped_refptr<brightray::URLRequestContextGetter> request_context_getter) {
+  auto job_factory = static_cast<AtomURLRequestJobFactory*>(
+      request_context_getter->job_factory());
+  if (job_factory)
+    job_factory->Clear();
+}
+
+void DestroyGlobalHandle(v8::Isolate* isolate,
+                         const v8::Global<v8::Value>& global_handle) {
+  v8::Locker locker(isolate);
+  v8::HandleScope handle_scope(isolate);
+  if (!global_handle.IsEmpty()) {
+    v8::Local<v8::Value> local_handle = global_handle.Get(isolate);
+    if (local_handle->IsObject()) {
+      v8::Local<v8::Object> object = local_handle->ToObject();
+      void* ptr = object->GetAlignedPointerFromInternalField(0);
+      if (!ptr)
+        return;
+      delete static_cast<mate::WrappableBase*>(ptr);
+      object->SetAlignedPointerInInternalField(0, nullptr);
+    }
+  }
+}
+
 }  // namespace
 
 Session::Session(v8::Isolate* isolate, AtomBrowserContext* browser_context)
@@ -468,8 +494,15 @@ Session::Session(v8::Isolate* isolate, AtomBrowserContext* browser_context)
 }
 
 Session::~Session() {
+  auto getter = browser_context_->GetRequestContext();
+  content::BrowserThread::PostTask(
+      content::BrowserThread::IO, FROM_HERE,
+      base::BindOnce(ClearJobFactoryInIO, base::RetainedRef(getter)));
   content::BrowserContext::GetDownloadManager(browser_context())->
       RemoveObserver(this);
+  DestroyGlobalHandle(isolate(), cookies_);
+  DestroyGlobalHandle(isolate(), web_request_);
+  DestroyGlobalHandle(isolate(), protocol_);
   g_sessions.erase(weak_map_id());
 }
 
@@ -498,7 +531,7 @@ template<Session::CacheAction action>
 void Session::DoCacheAction(const net::CompletionCallback& callback) {
   BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
       base::Bind(&DoCacheActionInIO,
-                 make_scoped_refptr(browser_context_->GetRequestContext()),
+                 WrapRefCounted(browser_context_->GetRequestContext()),
                  action,
                  callback));
 }
@@ -533,8 +566,10 @@ void Session::FlushStorageData() {
 void Session::SetProxy(const net::ProxyConfig& config,
                        const base::Closure& callback) {
   auto getter = browser_context_->GetRequestContext();
-  BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
-      base::Bind(&SetProxyInIO, base::Unretained(getter), config, callback));
+  BrowserThread::PostTask(
+      BrowserThread::IO, FROM_HERE,
+      base::BindOnce(&SetProxyInIO, base::RetainedRef(getter), config,
+                     callback));
 }
 
 void Session::SetDownloadPath(const base::FilePath& path) {
@@ -543,23 +578,20 @@ void Session::SetDownloadPath(const base::FilePath& path) {
 }
 
 void Session::EnableNetworkEmulation(const mate::Dictionary& options) {
-  std::unique_ptr<brightray::DevToolsNetworkConditions> conditions;
+  std::unique_ptr<content::DevToolsNetworkConditions> conditions;
   bool offline = false;
   double latency = 0.0, download_throughput = 0.0, upload_throughput = 0.0;
   if (options.Get("offline", &offline) && offline) {
-    conditions.reset(new brightray::DevToolsNetworkConditions(offline));
+    conditions.reset(new content::DevToolsNetworkConditions(offline));
   } else {
     options.Get("latency", &latency);
     options.Get("downloadThroughput", &download_throughput);
     options.Get("uploadThroughput", &upload_throughput);
-    conditions.reset(
-        new brightray::DevToolsNetworkConditions(false,
-                                                 latency,
-                                                 download_throughput,
-                                                 upload_throughput));
+    conditions.reset(new content::DevToolsNetworkConditions(
+        false, latency, download_throughput, upload_throughput));
   }
 
-  browser_context_->network_controller_handle()->SetNetworkState(
+  content::DevToolsNetworkController::SetNetworkState(
       devtools_network_emulation_client_id_, std::move(conditions));
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
@@ -570,8 +602,8 @@ void Session::EnableNetworkEmulation(const mate::Dictionary& options) {
 }
 
 void Session::DisableNetworkEmulation() {
-  std::unique_ptr<brightray::DevToolsNetworkConditions> conditions;
-  browser_context_->network_controller_handle()->SetNetworkState(
+  auto conditions = base::MakeUnique<content::DevToolsNetworkConditions>();
+  content::DevToolsNetworkController::SetNetworkState(
       devtools_network_emulation_client_id_, std::move(conditions));
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
@@ -591,7 +623,7 @@ void Session::SetCertVerifyProc(v8::Local<v8::Value> val,
 
   BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
       base::Bind(&SetCertVerifyProcInIO,
-                 make_scoped_refptr(browser_context_->GetRequestContext()),
+                 WrapRefCounted(browser_context_->GetRequestContext()),
                  proc));
 }
 
@@ -613,7 +645,7 @@ void Session::ClearHostResolverCache(mate::Arguments* args) {
 
   BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
       base::Bind(&ClearHostResolverCacheInIO,
-                 make_scoped_refptr(browser_context_->GetRequestContext()),
+                 WrapRefCounted(browser_context_->GetRequestContext()),
                  callback));
 }
 
@@ -629,14 +661,14 @@ void Session::ClearAuthCache(mate::Arguments* args) {
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
       base::Bind(&ClearAuthCacheInIO,
-                 make_scoped_refptr(browser_context_->GetRequestContext()),
+                 WrapRefCounted(browser_context_->GetRequestContext()),
                  options, callback));
 }
 
 void Session::AllowNTLMCredentialsForDomains(const std::string& domains) {
   BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
       base::Bind(&AllowNTLMCredentialsForDomainsInIO,
-                 make_scoped_refptr(browser_context_->GetRequestContext()),
+                 WrapRefCounted(browser_context_->GetRequestContext()),
                  domains));
 }
 

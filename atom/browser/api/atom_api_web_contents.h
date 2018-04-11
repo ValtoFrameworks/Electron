@@ -48,6 +48,10 @@ class AtomJavaScriptDialogManager;
 class WebContentsZoomController;
 class WebViewGuestDelegate;
 
+#if defined(ENABLE_OSR)
+class OffScreenWebContentsView;
+#endif
+
 namespace api {
 
 // Certain events are only in WebContentsDelegate, provide our own Observer to
@@ -88,6 +92,8 @@ class WebContents : public mate::TrackableObject<WebContents>,
 
   static void BuildPrototype(v8::Isolate* isolate,
                              v8::Local<v8::FunctionTemplate> prototype);
+
+  static int64_t GetIDForContents(content::WebContents* web_contents);
 
   // Notifies to destroy any guest web contents before destroying self.
   void DestroyWebContents(bool async);
@@ -217,6 +223,7 @@ class WebContents : public mate::TrackableObject<WebContents>,
   // Create window with the given disposition.
   void OnCreateWindow(
       const GURL& target_url,
+      const content::Referrer& referrer,
       const std::string& frame_name,
       WindowOpenDisposition disposition,
       const std::vector<std::string>& features,
@@ -359,7 +366,7 @@ class WebContents : public mate::TrackableObject<WebContents>,
   void WebContentsDestroyed() override;
   void NavigationEntryCommitted(
       const content::LoadCommittedDetails& load_details) override;
-  void TitleWasSet(content::NavigationEntry* entry, bool explicit_set) override;
+  void TitleWasSet(content::NavigationEntry* entry) override;
   void DidUpdateFaviconURL(
       const std::vector<content::FaviconURL>& urls) override;
   void PluginCrashed(const base::FilePath& plugin_path,
@@ -378,10 +385,12 @@ class WebContents : public mate::TrackableObject<WebContents>,
   void DevToolsOpened() override;
   void DevToolsClosed() override;
 
+#if defined(TOOLKIT_VIEWS)
   void ShowAutofillPopup(content::RenderFrameHost* frame_host,
                          const gfx::RectF& bounds,
                          const std::vector<base::string16>& values,
                          const std::vector<base::string16>& labels);
+#endif
 
  private:
   struct FrameDispatchHelper;
@@ -390,6 +399,10 @@ class WebContents : public mate::TrackableObject<WebContents>,
   uint32_t GetNextRequestId() {
     return ++request_id_;
   }
+
+#if defined(ENABLE_OSR)
+  OffScreenWebContentsView* GetOffScreenWebContentsView() const;
+#endif
 
   // Called when we receive a CursorChange message from chromium.
   void OnCursorChange(const content::WebCursor& cursor);

@@ -9,7 +9,6 @@
 #include "atom/browser/atom_access_token_store.h"
 #include "atom/browser/atom_browser_client.h"
 #include "atom/browser/atom_browser_context.h"
-#include "atom/browser/atom_web_ui_controller_factory.h"
 #include "atom/browser/bridge_task_runner.h"
 #include "atom/browser/browser.h"
 #include "atom/browser/javascript_environment.h"
@@ -32,6 +31,10 @@
 #include "chrome/browser/ui/libgtkui/gtk_util.h"
 #include "ui/events/devices/x11/touch_factory_x11.h"
 #endif
+
+#if defined(ENABLE_PDF_VIEWER)
+#include "atom/browser/atom_web_ui_controller_factory.h"
+#endif  // defined(ENABLE_PDF_VIEWER)
 
 namespace atom {
 
@@ -107,10 +110,9 @@ int AtomBrowserMainParts::GetExitCode() {
   return exit_code_ != nullptr ? *exit_code_ : 0;
 }
 
-base::Closure AtomBrowserMainParts::RegisterDestructionCallback(
-    const base::Closure& callback) {
-  auto iter = destructors_.insert(destructors_.end(), callback);
-  return base::Bind(&Erase<std::list<base::Closure>>, &destructors_, iter);
+void AtomBrowserMainParts::RegisterDestructionCallback(
+    base::OnceClosure callback) {
+  destructors_.insert(destructors_.end(), std::move(callback));
 }
 
 void AtomBrowserMainParts::PreEarlyInitialization() {
@@ -186,8 +188,10 @@ void AtomBrowserMainParts::PreMainMessageLoopRun() {
       base::Bind(&v8::Isolate::LowMemoryNotification,
                  base::Unretained(js_env_->isolate())));
 
+#if defined(ENABLE_PDF_VIEWER)
   content::WebUIControllerFactory::RegisterFactory(
       AtomWebUIControllerFactory::GetInstance());
+#endif  // defined(ENABLE_PDF_VIEWER)
 
   brightray::BrowserMainParts::PreMainMessageLoopRun();
   bridge_task_runner_->MessageLoopIsReady();
@@ -237,9 +241,10 @@ void AtomBrowserMainParts::PostMainMessageLoopRun() {
   // We don't use ranged for loop because iterators are getting invalided when
   // the callback runs.
   for (auto iter = destructors_.begin(); iter != destructors_.end();) {
-    base::Closure& callback = *iter;
+    base::OnceClosure callback = std::move(*iter);
+    if (!callback.is_null())
+      std::move(callback).Run();
     ++iter;
-    callback.Run();
   }
 }
 

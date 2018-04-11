@@ -50,6 +50,7 @@ class NativeWindowMac : public NativeWindow {
   void SetContentSizeConstraints(
       const extensions::SizeConstraints& size_constraints) override;
   void SetResizable(bool resizable) override;
+  void MoveTop() override;
   bool IsResizable() override;
   void SetMovable(bool movable) override;
   void SetAspectRatio(double aspect_ratio, const gfx::Size& extra_size)
@@ -88,7 +89,7 @@ class NativeWindowMac : public NativeWindow {
   std::string GetRepresentedFilename() override;
   void SetDocumentEdited(bool edited) override;
   bool IsDocumentEdited() override;
-  void SetIgnoreMouseEvents(bool ignore, bool) override;
+  void SetIgnoreMouseEvents(bool ignore, bool forward) override;
   void SetContentProtection(bool enable) override;
   void SetBrowserView(NativeBrowserView* browser_view) override;
   void SetParentWindow(NativeWindow* parent) override;
@@ -141,6 +142,8 @@ class NativeWindowMac : public NativeWindow {
   void ShowWindowButton(NSWindowButton button);
 
   void InstallView(NSView* view);
+
+  void SetForwardMouseMessages(bool forward);
 
   base::scoped_nsobject<AtomNSWindow> window_;
   base::scoped_nsobject<AtomNSWindowDelegate> window_delegate_;

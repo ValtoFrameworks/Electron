@@ -115,14 +115,13 @@ BrowserWindow::BrowserWindow(v8::Isolate* isolate,
     // These preferences will be used when the webContent launches new
     // render processes.
     auto* existing_preferences =
-        WebContentsPreferences::FromWebContents(web_contents->web_contents());
+        WebContentsPreferences::From(web_contents->web_contents());
     base::DictionaryValue web_preferences_dict;
     if (mate::ConvertFromV8(isolate, web_preferences.GetHandle(),
-                        &web_preferences_dict)) {
-      existing_preferences->web_preferences()->Clear();
+                            &web_preferences_dict)) {
+      existing_preferences->dict()->Clear();
       existing_preferences->Merge(web_preferences_dict);
     }
-
   } else {
     // Creates the WebContents used by BrowserWindow.
     web_contents = WebContents::Create(isolate, web_preferences);
@@ -155,7 +154,6 @@ void BrowserWindow::Init(v8::Isolate* isolate,
       options,
       parent.IsEmpty() ? nullptr : parent->window_.get()));
   web_contents->SetOwnerWindow(window_.get());
-  window_->set_is_offscreen_dummy(api_web_contents_->IsOffScreen());
 
   // Tell the content module to initialize renderer widget with transparent
   // mode.
@@ -514,11 +512,19 @@ void BrowserWindow::Close() {
 }
 
 void BrowserWindow::Focus() {
-  window_->Focus(true);
+  if (api_web_contents_->IsOffScreen()) {
+    FocusOnWebView();
+  } else {
+    window_->Focus(true);
+  }
 }
 
 void BrowserWindow::Blur() {
-  window_->Focus(false);
+  if (api_web_contents_->IsOffScreen()) {
+    BlurWebView();
+  } else {
+    window_->Focus(false);
+  }
 }
 
 bool BrowserWindow::IsFocused() {
@@ -749,6 +755,12 @@ std::vector<int> BrowserWindow::GetPosition() {
   result[1] = pos.y();
   return result;
 }
+
+#if defined(OS_WIN) || defined(OS_MACOSX)
+void BrowserWindow::MoveTop() {
+  window_->MoveTop();
+}
+#endif
 
 void BrowserWindow::SetTitle(const std::string& title) {
   window_->SetTitle(title);
@@ -1057,6 +1069,10 @@ void BrowserWindow::SetBrowserView(v8::Local<v8::Value> value) {
     window_->SetBrowserView(browser_view->view());
     browser_view->web_contents()->SetOwnerWindow(window_.get());
     browser_view_.Reset(isolate(), value);
+
+#if defined(OS_MACOSX)
+    UpdateDraggableRegions(nullptr, draggable_regions_);
+#endif
   }
 }
 
@@ -1279,6 +1295,9 @@ void BrowserWindow::BuildPrototype(v8::Isolate* isolate,
       .SetMethod("center", &BrowserWindow::Center)
       .SetMethod("setPosition", &BrowserWindow::SetPosition)
       .SetMethod("getPosition", &BrowserWindow::GetPosition)
+#if defined(OS_WIN) || defined(OS_MACOSX)
+      .SetMethod("moveTop" , &BrowserWindow::MoveTop)
+#endif
       .SetMethod("setTitle", &BrowserWindow::SetTitle)
       .SetMethod("getTitle", &BrowserWindow::GetTitle)
       .SetMethod("flashFrame", &BrowserWindow::FlashFrame)

@@ -361,7 +361,7 @@ It creates a new `BrowserWindow` with native properties as set by the `options`.
       script. You can use the `will-attach-webview` event on [webContents](web-contents.md)
       to strip away the `preload` script and to validate or alter the
       `<webview>`'s initial settings.
-    * `additionArguments` String[] (optional) - A list of strings that will be appended
+    * `additionalArguments` String[] (optional) - A list of strings that will be appended
       to `process.argv` in the renderer process of this app.  Useful for passing small
       bits of data down to renderer process preload scripts.
     * `safeDialogs` Boolean (optional) - Whether to enable browser style
@@ -1007,6 +1007,10 @@ can not be focused on.
 
 Returns `Boolean` - Whether the window is always on top of other windows.
 
+#### `win.moveTop()` _macOS_ _Windows_
+
+Moves window to top(z-order) regardless of focus
+
 #### `win.center()`
 
 Moves window to the center of the screen.
@@ -1144,7 +1148,7 @@ Same as `webContents.capturePage([rect, ]callback)`.
 
 * `url` String
 * `options` Object (optional)
-  * `httpReferrer` String (optional) - A HTTP Referrer url.
+  * `httpReferrer` String (optional) - An HTTP Referrer url.
   * `userAgent` String (optional) - A user agent originating the request.
   * `extraHeaders` String (optional) - Extra headers separated by "\n"
   * `postData` ([UploadRawData[]](structures/upload-raw-data.md) | [UploadFile[]](structures/upload-file.md) | [UploadFileSystem[]](structures/upload-file-system.md) | [UploadBlob[]](structures/upload-blob.md)) (optional)
@@ -1205,7 +1209,7 @@ menu bar.
 
 * `progress` Double
 * `options` Object (optional)
-  * `mode` String _Windows_ - Mode for the progress bar. Can be `none`, `normal`, `indeterminate`, `error`, or `paused`.
+  * `mode` String _Windows_ - Mode for the progress bar. Can be `none`, `normal`, `indeterminate`, `error` or `paused`.
 
 Sets progress value in progress bar. Valid range is [0, 1.0].
 
@@ -1378,10 +1382,10 @@ Returns `Boolean` - Whether the window is visible on all workspaces.
 
 * `ignore` Boolean
 * `options` Object (optional)
-  * `forward` Boolean (optional) _Windows_ - If true, forwards mouse move
+  * `forward` Boolean (optional) _macOS_ _Windows_ - If true, forwards mouse move
     messages to Chromium, enabling mouse related events such as `mouseleave`.
-	Only used when `ignore` is true. If `ignore` is false, forwarding is always
-	disabled regardless of this value.
+    Only used when `ignore` is true. If `ignore` is false, forwarding is always
+    disabled regardless of this value.
 
 Makes the window ignore all mouse events.
 

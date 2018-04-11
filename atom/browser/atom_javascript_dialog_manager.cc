@@ -35,16 +35,16 @@ void AtomJavaScriptDialogManager::RunJavaScriptDialog(
     JavaScriptDialogType dialog_type,
     const base::string16& message_text,
     const base::string16& default_prompt_text,
-    const DialogClosedCallback& callback,
+    DialogClosedCallback callback,
     bool* did_suppress_message) {
-  const std::string origin = origin_url.GetOrigin().spec();
+  const std::string& origin = origin_url.GetOrigin().spec();
   if (origin_counts_[origin] == kUserWantsNoMoreDialogs) {
-    return callback.Run(false, base::string16());
+    return std::move(callback).Run(false, base::string16());
   }
 
   if (dialog_type != JavaScriptDialogType::JAVASCRIPT_DIALOG_TYPE_ALERT &&
       dialog_type != JavaScriptDialogType::JAVASCRIPT_DIALOG_TYPE_CONFIRM) {
-    callback.Run(false, base::string16());
+    std::move(callback).Run(false, base::string16());
     return;
   }
 
@@ -55,33 +55,41 @@ void AtomJavaScriptDialogManager::RunJavaScriptDialog(
 
   origin_counts_[origin]++;
 
-  std::string checkbox_string;
+  auto* web_preferences = WebContentsPreferences::From(web_contents);
+  std::string checkbox;
   if (origin_counts_[origin] > 1 &&
-      WebContentsPreferences::IsPreferenceEnabled("safeDialogs",
-                                                  web_contents)) {
-    if (!WebContentsPreferences::GetString("safeDialogsMessage",
-                                           &checkbox_string, web_contents)) {
-      checkbox_string = "Prevent this app from creating additional dialogs";
-    }
+      web_preferences &&
+      web_preferences->IsEnabled("safeDialogs") &&
+      !web_preferences->dict()->GetString("safeDialogsMessage", &checkbox)) {
+    checkbox = "Prevent this app from creating additional dialogs";
   }
 
-  auto* relay = NativeWindowRelay::FromWebContents(web_contents);
+  // Don't set parent for offscreen window.
+  NativeWindow* window = nullptr;
+  if (web_preferences && !web_preferences->IsEnabled("offscreen")) {
+    auto* relay = NativeWindowRelay::FromWebContents(web_contents);
+    if (relay)
+      window = relay->window.get();
+  }
+
   atom::ShowMessageBox(
-      relay ? relay->window.get() : nullptr,
+      window,
       atom::MessageBoxType::MESSAGE_BOX_TYPE_NONE, buttons, -1, 0,
       atom::MessageBoxOptions::MESSAGE_BOX_NONE, "",
-      base::UTF16ToUTF8(message_text), "", checkbox_string,
+      base::UTF16ToUTF8(message_text), "", checkbox,
       false, gfx::ImageSkia(),
       base::Bind(&AtomJavaScriptDialogManager::OnMessageBoxCallback,
-                 base::Unretained(this), callback, origin));
+                 base::Unretained(this),
+                 base::Passed(std::move(callback)),
+                 origin));
 }
 
 void AtomJavaScriptDialogManager::RunBeforeUnloadDialog(
     content::WebContents* web_contents,
     bool is_reload,
-    const DialogClosedCallback& callback) {
+    DialogClosedCallback callback) {
   bool default_prevented = api_web_contents_->Emit("will-prevent-unload");
-  callback.Run(default_prevented, base::string16());
+  std::move(callback).Run(default_prevented, base::string16());
   return;
 }
 
@@ -91,13 +99,13 @@ void AtomJavaScriptDialogManager::CancelDialogs(
 }
 
 void AtomJavaScriptDialogManager::OnMessageBoxCallback(
-    const DialogClosedCallback& callback,
+    DialogClosedCallback callback,
     const std::string& origin,
     int code,
     bool checkbox_checked) {
   if (checkbox_checked)
     origin_counts_[origin] = kUserWantsNoMoreDialogs;
-  callback.Run(code == 0, base::string16());
+  std::move(callback).Run(code == 0, base::string16());
 }
 
 }  // namespace atom

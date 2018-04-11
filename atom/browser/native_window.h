@@ -103,6 +103,9 @@ class NativeWindow : public base::SupportsUserData {
   virtual double GetSheetOffsetX();
   virtual double GetSheetOffsetY();
   virtual void SetResizable(bool resizable) = 0;
+#if defined(OS_WIN) || defined(OS_MACOSX)
+  virtual void MoveTop() = 0;
+#endif
   virtual bool IsResizable() = 0;
   virtual void SetMovable(bool movable) = 0;
   virtual bool IsMovable() = 0;
@@ -215,13 +218,6 @@ class NativeWindow : public base::SupportsUserData {
   virtual void HandleKeyboardEvent(
       content::WebContents*,
       const content::NativeWebKeyboardEvent& event) {}
-  virtual void ShowAutofillPopup(
-    content::RenderFrameHost* frame_host,
-    content::WebContents* web_contents,
-    const gfx::RectF& bounds,
-    const std::vector<base::string16>& values,
-    const std::vector<base::string16>& labels) {}
-  virtual void HideAutofillPopup(content::RenderFrameHost* frame_host) {}
 
   // Public API used by platform-dependent delegates and observers to send UI
   // related notifications.
@@ -271,9 +267,6 @@ class NativeWindow : public base::SupportsUserData {
   bool transparent() const { return transparent_; }
   bool enable_larger_than_screen() const { return enable_larger_than_screen_; }
 
-  void set_is_offscreen_dummy(bool is_dummy) { is_osr_dummy_ = is_dummy; }
-  bool is_offscreen_dummy() const { return is_osr_dummy_; }
-
   NativeBrowserView* browser_view() const { return browser_view_; }
   NativeWindow* parent() const { return parent_; }
   bool is_modal() const { return is_modal_; }
@@ -318,9 +311,6 @@ class NativeWindow : public base::SupportsUserData {
 
   // Is this a modal window.
   bool is_modal_;
-
-  // Is this a dummy window for an offscreen WebContents.
-  bool is_osr_dummy_;
 
   // The browser view layer.
   NativeBrowserView* browser_view_;

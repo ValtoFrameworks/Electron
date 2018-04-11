@@ -18,6 +18,10 @@
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_getter.h"
 
+#if DCHECK_IS_ON()
+#include "base/debug/leak_tracker.h"
+#endif
+
 namespace base {
 class MessageLoop;
 }
@@ -35,7 +39,6 @@ class URLRequestJobFactory;
 namespace brightray {
 
 class RequireCTDelegate;
-class DevToolsNetworkControllerHandle;
 class NetLog;
 
 class URLRequestContextGetter : public net::URLRequestContextGetter {
@@ -64,7 +67,6 @@ class URLRequestContextGetter : public net::URLRequestContextGetter {
 
   URLRequestContextGetter(
       Delegate* delegate,
-      DevToolsNetworkControllerHandle* handle,
       NetLog* net_log,
       const base::FilePath& base_path,
       bool in_memory,
@@ -85,16 +87,21 @@ class URLRequestContextGetter : public net::URLRequestContextGetter {
   net::HostResolver* host_resolver();
   net::URLRequestJobFactory* job_factory() const { return job_factory_; }
 
+  void NotifyContextShutdownOnIO();
+
  private:
   Delegate* delegate_;
 
-  DevToolsNetworkControllerHandle* network_controller_handle_;
   NetLog* net_log_;
   base::FilePath base_path_;
   bool in_memory_;
   scoped_refptr<base::SingleThreadTaskRunner> io_task_runner_;
 
   std::string user_agent_;
+
+#if DCHECK_IS_ON()
+  base::debug::LeakTracker<URLRequestContextGetter> leak_tracker_;
+#endif
 
   std::unique_ptr<RequireCTDelegate> ct_delegate_;
   std::unique_ptr<net::ProxyConfigService> proxy_config_service_;
@@ -109,6 +116,8 @@ class URLRequestContextGetter : public net::URLRequestContextGetter {
   content::URLRequestInterceptorScopedVector protocol_interceptors_;
 
   net::URLRequestJobFactory* job_factory_;  // weak ref
+
+  bool context_shutting_down_;
 
   DISALLOW_COPY_AND_ASSIGN(URLRequestContextGetter);
 };

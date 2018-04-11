@@ -56,12 +56,17 @@ class AtomBrowserClient : public brightray::BrowserClient,
   void OverrideSiteInstanceForNavigation(
       content::RenderFrameHost* render_frame_host,
       content::BrowserContext* browser_context,
-      content::SiteInstance* current_instance,
       const GURL& dest_url,
+      bool has_request_started,
+      content::SiteInstance* candidate_instance,
       content::SiteInstance** new_instance) override;
   void AppendExtraCommandLineSwitches(base::CommandLine* command_line,
                                       int child_process_id) override;
   void DidCreatePpapiPlugin(content::BrowserPpapiHost* browser_host) override;
+  void GetGeolocationRequestContext(
+      base::OnceCallback<void(scoped_refptr<net::URLRequestContextGetter>)>
+          callback) override;
+  std::string GetGeolocationApiKey() override;
   content::QuotaPermissionContext* CreateQuotaPermissionContext() override;
   void AllowCertificateError(
       content::WebContents* web_contents,
@@ -69,7 +74,6 @@ class AtomBrowserClient : public brightray::BrowserClient,
       const net::SSLInfo& ssl_info,
       const GURL& request_url,
       content::ResourceType resource_type,
-      bool overridable,
       bool strict_enforcement,
       bool expired_previous_decision,
       const base::Callback<void(content::CertificateRequestResultType)>&
@@ -115,15 +119,16 @@ class AtomBrowserClient : public brightray::BrowserClient,
                            int exit_code) override;
 
  private:
-  bool ShouldCreateNewSiteInstance(content::RenderFrameHost* render_frame_host,
-                                   content::BrowserContext* browser_context,
-                                   content::SiteInstance* current_instance,
-                                   const GURL& dest_url);
   struct ProcessPreferences {
     bool sandbox = false;
     bool native_window_open = false;
     bool disable_popups = false;
   };
+
+  bool ShouldCreateNewSiteInstance(content::RenderFrameHost* render_frame_host,
+                                   content::BrowserContext* browser_context,
+                                   content::SiteInstance* current_instance,
+                                   const GURL& dest_url);
   void AddProcessPreferences(int process_id, ProcessPreferences prefs);
   void RemoveProcessPreferences(int process_id);
   bool IsProcessObserved(int process_id);

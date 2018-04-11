@@ -159,6 +159,7 @@ double WebFrame::GetZoomFactor() const {
 
 void WebFrame::SetVisualZoomLevelLimits(double min_level, double max_level) {
   web_frame_->View()->SetDefaultPageScaleLimits(min_level, max_level);
+  web_frame_->View()->SetIgnoreViewportTagScaleLimits(true);
 }
 
 void WebFrame::SetLayoutZoomLevelLimits(double min_level, double max_level) {
@@ -167,9 +168,8 @@ void WebFrame::SetLayoutZoomLevelLimits(double min_level, double max_level) {
 
 v8::Local<v8::Value> WebFrame::RegisterEmbedderCustomElement(
     const base::string16& name, v8::Local<v8::Object> options) {
-  blink::WebExceptionCode c = 0;
   return web_frame_->GetDocument().RegisterEmbedderCustomElement(
-      blink::WebString::FromUTF16(name), options, c);
+      blink::WebString::FromUTF16(name), options);
 }
 
 void WebFrame::RegisterElementResizeCallback(

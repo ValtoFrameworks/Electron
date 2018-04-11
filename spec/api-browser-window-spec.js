@@ -419,6 +419,17 @@ describe('BrowserWindow module', () => {
     })
   })
 
+  describe('BrowserWindow.getFocusedWindow()', (done) => {
+    it('returns the opener window when dev tools window is focused', (done) => {
+      w.show()
+      w.webContents.once('devtools-focused', () => {
+        assert.deepEqual(BrowserWindow.getFocusedWindow(), w)
+        done()
+      })
+      w.webContents.openDevTools({mode: 'undocked'})
+    })
+  })
+
   describe('BrowserWindow.capturePage(rect, callback)', () => {
     it('calls the callback with a Buffer', (done) => {
       w.capturePage({
@@ -429,6 +440,29 @@ describe('BrowserWindow module', () => {
       }, (image) => {
         assert.equal(image.isEmpty(), true)
         done()
+      })
+    })
+
+    it('preserves transparency', (done) => {
+      w.close()
+      const width = 400
+      const height = 400
+      w = new BrowserWindow({
+        show: false,
+        width: width,
+        height: height,
+        transparent: true
+      })
+      w.loadURL('data:text/html,<html><body background-color: rgba(255,255,255,0)></body></html>')
+      w.once('ready-to-show', () => {
+        w.show()
+        w.capturePage((image) => {
+          let imgBuffer = image.toPNG()
+          // Check 25th byte in the PNG
+          // Values can be 0,2,3,4, or 6. We want 6, which is RGB + Alpha
+          assert.equal(imgBuffer[25], 6)
+          done()
+        })
       })
     })
   })

@@ -1192,6 +1192,9 @@ void NativeWindowMac::SetContentSizeConstraints(
   NativeWindow::SetContentSizeConstraints(size_constraints);
 }
 
+void NativeWindowMac::MoveTop(){
+  [window_ orderWindow:NSWindowAbove relativeTo:0];
+}
 void NativeWindowMac::SetResizable(bool resizable) {
   SetStyleMask(resizable, NSResizableWindowMask);
 }
@@ -1482,8 +1485,14 @@ bool NativeWindowMac::IsDocumentEdited() {
   return [window_ isDocumentEdited];
 }
 
-void NativeWindowMac::SetIgnoreMouseEvents(bool ignore, bool) {
+void NativeWindowMac::SetIgnoreMouseEvents(bool ignore, bool forward) {
   [window_ setIgnoresMouseEvents:ignore];
+
+  if (!ignore) {
+    SetForwardMouseMessages(NO);
+  } else {
+    SetForwardMouseMessages(forward);
+  }
 }
 
 void NativeWindowMac::SetContentProtection(bool enable) {
@@ -1818,6 +1827,10 @@ void NativeWindowMac::InstallView(NSView* view) {
     // prevent them from doing so in a frameless app window.
     [[window_ standardWindowButton:NSWindowZoomButton] setEnabled:NO];
   }
+}
+
+void NativeWindowMac::SetForwardMouseMessages(bool forward) {
+  [window_ setAcceptsMouseMovedEvents:forward];
 }
 
 void NativeWindowMac::SetStyleMask(bool on, NSUInteger flag) {

@@ -88,7 +88,6 @@ void FlipWindowStyle(HWND handle, bool on, DWORD flag) {
 bool IsAltKey(const content::NativeWebKeyboardEvent& event) {
   return event.windows_key_code == ui::VKEY_MENU;
 }
-
 bool IsAltModifier(const content::NativeWebKeyboardEvent& event) {
   typedef content::NativeWebKeyboardEvent::Modifiers Modifiers;
   int modifiers = event.GetModifiers();
@@ -98,21 +97,6 @@ bool IsAltModifier(const content::NativeWebKeyboardEvent& event) {
          (modifiers == (Modifiers::kAltKey | Modifiers::kIsLeft)) ||
          (modifiers == (Modifiers::kAltKey | Modifiers::kIsRight));
 }
-
-#if defined(USE_X11)
-int SendClientEvent(XDisplay* display, ::Window window, const char* msg) {
-  XEvent event = {};
-  event.xclient.type = ClientMessage;
-  event.xclient.send_event = True;
-  event.xclient.message_type = XInternAtom(display, msg, False);
-  event.xclient.window = window;
-  event.xclient.format = 32;
-  XSendEvent(display, DefaultRootWindow(display), False,
-             SubstructureRedirectMask | SubstructureNotifyMask, &event);
-  XFlush(display);
-  return True;
-}
-#endif
 
 class NativeWindowClientView : public views::ClientView {
  public:
@@ -328,8 +312,6 @@ NativeWindowViews::NativeWindowViews(
   window_->CenterWindow(size);
   Layout();
 
-  autofill_popup_.reset(new AutofillPopup(GetNativeView()));
-
 #if defined(OS_WIN)
   // Save initial window state.
   if (fullscreen)
@@ -368,15 +350,7 @@ void NativeWindowViews::Focus(bool focus) {
     return;
 
   if (focus) {
-#if defined(OS_WIN)
     window_->Activate();
-#elif defined(USE_X11)
-    // The "Activate" implementation of Chromium is not reliable on Linux.
-    ::Window window = GetAcceleratedWidget();
-    XDisplay* xdisplay = gfx::GetXDisplay();
-    SendClientEvent(xdisplay, window, "_NET_ACTIVE_WINDOW");
-    XMapRaised(xdisplay, window);
-#endif
   } else {
     window_->Deactivate();
   }
@@ -624,6 +598,16 @@ void NativeWindowViews::SetResizable(bool resizable) {
 
   resizable_ = resizable;
 }
+
+#if defined(OS_WIN)
+void NativeWindowViews::MoveTop() {
+  gfx::Point pos = GetPosition();
+  gfx::Size size = GetSize();
+  ::SetWindowPos(GetAcceleratedWidget(), HWND_TOP,
+                pos.x(), pos.y(), size.width(), size.height(),
+                SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+}
+#endif
 
 bool NativeWindowViews::IsResizable() {
 #if defined(OS_WIN)
@@ -1361,50 +1345,6 @@ void NativeWindowViews::HandleKeyboardEvent(
   }
 }
 
-void NativeWindowViews::ShowAutofillPopup(
-    content::RenderFrameHost* frame_host,
-    content::WebContents* web_contents,
-    const gfx::RectF& bounds,
-    const std::vector<base::string16>& values,
-    const std::vector<base::string16>& labels) {
-  bool is_offsceen = false;
-  bool is_embedder_offscreen = false;
-
-  auto* web_contents_preferences =
-      WebContentsPreferences::FromWebContents(web_contents);
-  if (web_contents_preferences) {
-    const auto* web_preferences = web_contents_preferences->web_preferences();
-
-    web_preferences->GetBoolean("offscreen", &is_offsceen);
-    int guest_instance_id = 0;
-    web_preferences->GetInteger(options::kGuestInstanceID, &guest_instance_id);
-
-    if (guest_instance_id) {
-      auto manager = WebViewManager::GetWebViewManager(web_contents);
-      if (manager) {
-        auto embedder = manager->GetEmbedder(guest_instance_id);
-        if (embedder) {
-          is_embedder_offscreen = WebContentsPreferences::IsPreferenceEnabled(
-              "offscreen", embedder);
-        }
-      }
-    }
-  }
-
-  autofill_popup_->CreateView(
-      frame_host,
-      is_offsceen || is_embedder_offscreen,
-      widget(),
-      bounds);
-  autofill_popup_->SetItems(values, labels);
-  autofill_popup_->UpdatePopupBounds(menu_bar_visible_ ? 0 : kMenuBarHeight);
-}
-
-void NativeWindowViews::HideAutofillPopup(
-    content::RenderFrameHost* frame_host) {
-  autofill_popup_->Hide();
-}
-
 void NativeWindowViews::Layout() {
   const auto size = GetContentsBounds().size();
   const auto menu_bar_bounds =
@@ -1419,9 +1359,6 @@ void NativeWindowViews::Layout() {
         gfx::Rect(0, menu_bar_bounds.height(), size.width(),
                   size.height() - menu_bar_bounds.height()));
   }
-
-  if (autofill_popup_.get())
-    autofill_popup_->UpdatePopupBounds(menu_bar_visible_ ? 0 : kMenuBarHeight);
 }
 
 gfx::Size NativeWindowViews::GetMinimumSize() const {
