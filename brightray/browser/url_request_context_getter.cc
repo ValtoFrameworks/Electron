@@ -27,6 +27,7 @@
 #include "net/cert/ct_log_verifier.h"
 #include "net/cert/ct_policy_enforcer.h"
 #include "net/cert/multi_log_ct_verifier.h"
+#include "net/cookies/cookie_monster.h"
 #include "net/dns/mapped_host_resolver.h"
 #include "net/http/http_auth_filter.h"
 #include "net/http/http_auth_handler_factory.h"
@@ -60,6 +61,11 @@ std::string URLRequestContextGetter::Delegate::GetUserAgent() {
   return base::EmptyString();
 }
 
+std::unique_ptr<net::NetworkDelegate>
+URLRequestContextGetter::Delegate::CreateNetworkDelegate() {
+  return nullptr;
+}
+
 std::unique_ptr<net::URLRequestJobFactory>
 URLRequestContextGetter::Delegate::CreateURLRequestJobFactory(
     content::ProtocolHandlerMap* protocol_handlers) {
@@ -67,8 +73,8 @@ URLRequestContextGetter::Delegate::CreateURLRequestJobFactory(
       new net::URLRequestJobFactoryImpl);
 
   for (auto& it : *protocol_handlers) {
-    job_factory->SetProtocolHandler(
-        it.first, base::WrapUnique(it.second.release()));
+    job_factory->SetProtocolHandler(it.first,
+                                    base::WrapUnique(it.second.release()));
   }
   protocol_handlers->clear();
 
@@ -87,17 +93,14 @@ URLRequestContextGetter::Delegate::CreateURLRequestJobFactory(
 net::HttpCache::BackendFactory*
 URLRequestContextGetter::Delegate::CreateHttpCacheBackendFactory(
     const base::FilePath& base_path) {
-  auto command_line = base::CommandLine::ForCurrentProcess();
+  auto* command_line = base::CommandLine::ForCurrentProcess();
   int max_size = 0;
   base::StringToInt(command_line->GetSwitchValueASCII(switches::kDiskCacheSize),
                     &max_size);
 
   base::FilePath cache_path = base_path.Append(FILE_PATH_LITERAL("Cache"));
   return new net::HttpCache::DefaultBackend(
-      net::DISK_CACHE,
-      net::CACHE_BACKEND_DEFAULT,
-      cache_path,
-      max_size);
+      net::DISK_CACHE, net::CACHE_BACKEND_DEFAULT, cache_path, max_size);
 }
 
 std::unique_ptr<net::CertVerifier>
@@ -113,7 +116,7 @@ URLRequestContextGetter::Delegate::CreateSSLConfigService() {
 
 std::vector<std::string>
 URLRequestContextGetter::Delegate::GetCookieableSchemes() {
-  return { "http", "https", "ws", "wss" };
+  return {"http", "https", "ws", "wss"};
 }
 
 URLRequestContextGetter::URLRequestContextGetter(
@@ -144,12 +147,11 @@ URLRequestContextGetter::URLRequestContextGetter(
   // We must create the proxy config service on the UI loop on Linux because it
   // must synchronously run on the glib message loop. This will be passed to
   // the URLRequestContextStorage on the IO thread in GetURLRequestContext().
-  proxy_config_service_ = net::ProxyService::CreateSystemProxyConfigService(
-      io_task_runner_);
+  proxy_config_service_ =
+      net::ProxyService::CreateSystemProxyConfigService(io_task_runner_);
 }
 
-URLRequestContextGetter::~URLRequestContextGetter() {
-}
+URLRequestContextGetter::~URLRequestContextGetter() {}
 
 void URLRequestContextGetter::NotifyContextShutdownOnIO() {
   context_shutting_down_ = true;
@@ -204,23 +206,26 @@ net::URLRequestContext* URLRequestContextGetter::GetURLRequestContext() {
 
     storage_->set_network_delegate(delegate_->CreateNetworkDelegate());
 
-    auto cookie_path = in_memory_ ?
-        base::FilePath() : base_path_.Append(FILE_PATH_LITERAL("Cookies"));
-    auto cookie_config = content::CookieStoreConfig(
-        cookie_path,
-        content::CookieStoreConfig::EPHEMERAL_SESSION_COOKIES,
-        nullptr);
-    cookie_config.cookieable_schemes = delegate_->GetCookieableSchemes();
+    auto cookie_path = in_memory_
+                           ? base::FilePath()
+                           : base_path_.Append(FILE_PATH_LITERAL("Cookies"));
     std::unique_ptr<net::CookieStore> cookie_store =
-        content::CreateCookieStore(cookie_config);
+        content::CreateCookieStore(content::CookieStoreConfig(
+            cookie_path, content::CookieStoreConfig::EPHEMERAL_SESSION_COOKIES,
+            nullptr));
     storage_->set_cookie_store(std::move(cookie_store));
+
+    // Set custom schemes that can accept cookies.
+    net::CookieMonster* cookie_monster =
+        static_cast<net::CookieMonster*>(url_request_context_->cookie_store());
+    cookie_monster->SetCookieableSchemes(delegate_->GetCookieableSchemes());
     // Cookie store will outlive notifier by order of declaration
     // in the header.
     cookie_change_sub_ =
         url_request_context_->cookie_store()->AddCallbackForAllChanges(
             base::Bind(&URLRequestContextGetter::OnCookieChanged, this));
 
-    storage_->set_channel_id_service(base::MakeUnique<net::ChannelIDService>(
+    storage_->set_channel_id_service(std::make_unique<net::ChannelIDService>(
         new net::DefaultChannelIDStore(nullptr)));
 
     storage_->set_http_user_agent_settings(
@@ -255,13 +260,11 @@ net::URLRequestContext* URLRequestContextGetter::GetURLRequestContext() {
       auto proxy_config = net::ProxyConfig::CreateFromCustomPacURL(
           GURL(command_line.GetSwitchValueASCII(switches::kProxyPacUrl)));
       proxy_config.set_pac_mandatory(true);
-      storage_->set_proxy_service(net::ProxyService::CreateFixed(
-          proxy_config));
+      storage_->set_proxy_service(net::ProxyService::CreateFixed(proxy_config));
     } else {
       storage_->set_proxy_service(
           net::ProxyService::CreateUsingSystemProxyResolver(
-              std::move(proxy_config_service_),
-              net_log_));
+              std::move(proxy_config_service_), net_log_));
     }
 
     std::vector<std::string> schemes;
@@ -270,8 +273,8 @@ net::URLRequestContext* URLRequestContextGetter::GetURLRequestContext() {
     schemes.push_back(std::string("ntlm"));
     schemes.push_back(std::string("negotiate"));
 #if defined(OS_POSIX)
-    http_auth_preferences_.reset(new net::HttpAuthPreferences(schemes,
-                                                              std::string()));
+    http_auth_preferences_.reset(
+        new net::HttpAuthPreferences(schemes, std::string()));
 #else
     http_auth_preferences_.reset(new net::HttpAuthPreferences(schemes));
 #endif
@@ -289,9 +292,8 @@ net::URLRequestContext* URLRequestContextGetter::GetURLRequestContext() {
               switches::kAuthNegotiateDelegateWhitelist));
     }
 
-    auto auth_handler_factory =
-        net::HttpAuthHandlerRegistryFactory::Create(
-            http_auth_preferences_.get(), host_resolver.get());
+    auto auth_handler_factory = net::HttpAuthHandlerRegistryFactory::Create(
+        http_auth_preferences_.get(), host_resolver.get());
 
     std::unique_ptr<net::TransportSecurityState> transport_security_state =
         base::WrapUnique(new net::TransportSecurityState);
@@ -306,10 +308,10 @@ net::URLRequestContext* URLRequestContextGetter::GetURLRequestContext() {
     storage_->set_http_server_properties(std::move(server_properties));
 
     std::unique_ptr<net::MultiLogCTVerifier> ct_verifier =
-        base::MakeUnique<net::MultiLogCTVerifier>();
+        std::make_unique<net::MultiLogCTVerifier>();
     ct_verifier->AddLogs(net::ct::CreateLogVerifiersForKnownLogs());
     storage_->set_cert_transparency_verifier(std::move(ct_verifier));
-    storage_->set_ct_policy_enforcer(base::MakeUnique<net::CTPolicyEnforcer>());
+    storage_->set_ct_policy_enforcer(std::make_unique<net::CTPolicyEnforcer>());
 
     net::HttpNetworkSession::Params network_session_params;
     network_session_params.ignore_certificate_errors = false;
@@ -346,7 +348,7 @@ net::URLRequestContext* URLRequestContextGetter::GetURLRequestContext() {
       backend.reset(delegate_->CreateHttpCacheBackendFactory(base_path_));
     }
 
-    storage_->set_http_transaction_factory(base::MakeUnique<net::HttpCache>(
+    storage_->set_http_transaction_factory(std::make_unique<net::HttpCache>(
         content::CreateDevToolsNetworkTransactionFactory(
             http_network_session_.get()),
         std::move(backend), false));

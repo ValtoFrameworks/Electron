@@ -9,18 +9,13 @@
 
 #include <set>
 #include <string>
-#include <vector>
 
-#include "atom/browser/ui/accelerator_util.h"
-#include "ui/views/widget/widget_delegate.h"
 #include "ui/views/widget/widget_observer.h"
 
 #if defined(OS_WIN)
 #include "atom/browser/ui/win/message_handler_delegate.h"
 #include "atom/browser/ui/win/taskbar_host.h"
 #include "base/win/scoped_gdi_object.h"
-#include "ui/base/win/accessibility_misc_utils.h"
-#include <UIAutomationCoreApi.h>
 #endif
 
 namespace views {
@@ -30,7 +25,7 @@ class UnhandledKeyboardEventHandler;
 namespace atom {
 
 class GlobalMenuBarX11;
-class MenuBar;
+class RootView;
 class WindowStateWatcher;
 
 #if defined(OS_WIN)
@@ -43,15 +38,13 @@ class NativeWindowViews : public NativeWindow,
 #if defined(OS_WIN)
                           public MessageHandlerDelegate,
 #endif
-                          public views::WidgetDelegateView,
                           public views::WidgetObserver {
  public:
-  NativeWindowViews(brightray::InspectableWebContents* inspectable_web_contents,
-                    const mate::Dictionary& options,
-                    NativeWindow* parent);
+  NativeWindowViews(const mate::Dictionary& options, NativeWindow* parent);
   ~NativeWindowViews() override;
 
   // NativeWindow:
+  void SetContentView(brightray::InspectableWebContents* web_contents) override;
   void Close() override;
   void CloseImmediately() override;
   void Focus(bool focus) override;
@@ -61,6 +54,7 @@ class NativeWindowViews : public NativeWindow,
   void Hide() override;
   bool IsVisible() override;
   bool IsEnabled() override;
+  void SetEnabled(bool enable) override;
   void Maximize() override;
   void Unmaximize() override;
   bool IsMaximized() override;
@@ -90,8 +84,10 @@ class NativeWindowViews : public NativeWindow,
   bool IsFullScreenable() override;
   void SetClosable(bool closable) override;
   bool IsClosable() override;
-  void SetAlwaysOnTop(bool top, const std::string& level,
-                      int relativeLevel, std::string* error) override;
+  void SetAlwaysOnTop(bool top,
+                      const std::string& level,
+                      int relativeLevel,
+                      std::string* error) override;
   bool IsAlwaysOnTop() override;
   void Center() override;
   void Invalidate() override;
@@ -139,10 +135,7 @@ class NativeWindowViews : public NativeWindow,
   void SetIcon(const gfx::ImageSkia& icon);
 #endif
 
-  void SetEnabled(bool enable) override;
-
-  views::Widget* widget() const { return window_.get(); }
-  views::View* web_view() const { return web_view_; }
+  views::View* content_view() const { return content_view_; }
   SkRegion* draggable_region() const { return draggable_region_.get(); }
 
 #if defined(OS_WIN)
@@ -151,10 +144,9 @@ class NativeWindowViews : public NativeWindow,
 
  private:
   // views::WidgetObserver:
-  void OnWidgetActivationChanged(
-      views::Widget* widget, bool active) override;
-  void OnWidgetBoundsChanged(
-      views::Widget* widget, const gfx::Rect& bounds) override;
+  void OnWidgetActivationChanged(views::Widget* widget, bool active) override;
+  void OnWidgetBoundsChanged(views::Widget* widget,
+                             const gfx::Rect& bounds) override;
 
   // views::WidgetDelegate:
   void DeleteDelegate() override;
@@ -164,12 +156,10 @@ class NativeWindowViews : public NativeWindow,
   bool CanMinimize() const override;
   base::string16 GetWindowTitle() const override;
   bool ShouldHandleSystemCommands() const override;
-  views::Widget* GetWidget() override;
-  const views::Widget* GetWidget() const override;
   views::View* GetContentsView() override;
   bool ShouldDescendIntoChildForEventHandling(
-     gfx::NativeView child,
-     const gfx::Point& location) override;
+      gfx::NativeView child,
+      const gfx::Point& location) override;
   views::ClientView* CreateClientView(views::Widget* widget) override;
   views::NonClientFrameView* CreateNonClientFrameView(
       views::Widget* widget) override;
@@ -180,15 +170,21 @@ class NativeWindowViews : public NativeWindow,
 
 #if defined(OS_WIN)
   // MessageHandlerDelegate:
-  bool PreHandleMSG(
-      UINT message, WPARAM w_param, LPARAM l_param, LRESULT* result) override;
+  bool PreHandleMSG(UINT message,
+                    WPARAM w_param,
+                    LPARAM l_param,
+                    LRESULT* result) override;
   void HandleSizeEvent(WPARAM w_param, LPARAM l_param);
   void SetForwardMouseMessages(bool forward);
-  static LRESULT CALLBACK SubclassProc(
-      HWND hwnd, UINT msg, WPARAM w_param, LPARAM l_param, UINT_PTR subclass_id,
-      DWORD_PTR ref_data);
-  static LRESULT CALLBACK MouseHookProc(
-      int n_code, WPARAM w_param, LPARAM l_param);
+  static LRESULT CALLBACK SubclassProc(HWND hwnd,
+                                       UINT msg,
+                                       WPARAM w_param,
+                                       LPARAM l_param,
+                                       UINT_PTR subclass_id,
+                                       DWORD_PTR ref_data);
+  static LRESULT CALLBACK MouseHookProc(int n_code,
+                                        WPARAM w_param,
+                                        LPARAM l_param);
 #endif
 
   // NativeWindow:
@@ -196,26 +192,19 @@ class NativeWindowViews : public NativeWindow,
       content::WebContents*,
       const content::NativeWebKeyboardEvent& event) override;
 
-  // views::View:
-  void Layout() override;
-  gfx::Size GetMinimumSize() const override;
-  gfx::Size GetMaximumSize() const override;
-  bool AcceleratorPressed(const ui::Accelerator& accelerator) override;
-
-  // Register accelerators supported by the menu model.
-  void RegisterAccelerators(AtomMenuModel* menu_model);
-
   // Returns the restore state for the window.
   ui::WindowShowState GetRestoredState();
 
-  std::unique_ptr<views::Widget> window_;
-  views::View* web_view_;  // Managed by inspectable_web_contents_.
+  std::unique_ptr<RootView> root_view_;
+
+  views::View* content_view_;  // Weak ref.
   views::View* focused_view_;  // The view should be focused by default.
 
-  std::unique_ptr<MenuBar> menu_bar_;
-  bool menu_bar_autohide_;
-  bool menu_bar_visible_;
-  bool menu_bar_alt_pressed_;
+  // The "resizable" flag on Linux is implemented by setting size constraints,
+  // we need to make sure size constraints are restored when window becomes
+  // resizable again. This is also used on Windows, to keep taskbar resize
+  // events from resizing the window.
+  extensions::SizeConstraints old_size_constraints_;
 
 #if defined(USE_X11)
   std::unique_ptr<GlobalMenuBarX11> global_menu_bar_;
@@ -226,13 +215,7 @@ class NativeWindowViews : public NativeWindow,
   // To disable the mouse events.
   std::unique_ptr<EventDisabler> event_disabler_;
 #endif
-#if defined(OS_WIN) || defined(USE_X11)
-  // The "resizable" flag on Linux is implemented by setting size constraints,
-  // we need to make sure size constraints are restored when window becomes
-  // resizable again. This is also used on Windows, to keep taskbar resize
-  // events from resizing the window.
-  extensions::SizeConstraints old_size_constraints_;
-#endif
+
 #if defined(OS_WIN)
   // Weak ref.
   AtomDesktopWindowTreeHostWin* atom_desktop_window_tree_host_win_;
@@ -282,9 +265,6 @@ class NativeWindowViews : public NativeWindow,
 
   // Handles unhandled keyboard messages coming back from the renderer process.
   std::unique_ptr<views::UnhandledKeyboardEventHandler> keyboard_event_handler_;
-
-  // Map from accelerator to menu item's command id.
-  accelerator_util::AcceleratorTable accelerator_table_;
 
   // For custom drag, the whole window is non-draggable and the draggable region
   // has to been explicitly provided.

@@ -5,6 +5,9 @@
     # Set this to true when building with Clang.
     'clang%': 1,
 
+    # Set this to the absolute path to sccache when building with sccache
+    'cc_wrapper%': '',
+
     # Path to mips64el toolchain.
     'make_mips64_dir%': 'vendor/gcc-4.8.3-d197-n64-loongson/usr',
 
@@ -101,6 +104,15 @@
     ],
   },
   'conditions': [
+    # Setup cc_wrapper
+    ['cc_wrapper!=""', {
+      'make_global_settings': [
+        ['CC_wrapper', '<(cc_wrapper)'],
+        ['CXX_wrapper', '<(cc_wrapper)'],
+        ['CC.host_wrapper', '<(cc_wrapper)'],
+        ['CXX.host_wrapper', '<(cc_wrapper)']
+      ],
+    }],
     # Setup building with clang.
     ['clang==1', {
       'make_global_settings': [
@@ -122,6 +134,43 @@
           'CLANG_CXX_LANGUAGE_STANDARD': 'c++14',  # -std=c++14
         },
         'target_conditions': [
+          ['_target_name in ["electron", "brightray"]', {
+            'conditions': [
+              ['OS=="mac"', {
+                'xcode_settings': {
+                  'OTHER_CFLAGS': [
+                    "-Xclang",
+                    "-load",
+                    "-Xclang",
+                    "<(source_root)/<(make_clang_dir)/lib/libFindBadConstructs.dylib",
+                    "-Xclang",
+                    "-add-plugin",
+                    "-Xclang",
+                    "find-bad-constructs",
+                    "-Xclang",
+                    "-plugin-arg-find-bad-constructs",
+                    "-Xclang",
+                    "check-auto-raw-pointer",
+                  ],
+                },
+              }, {  # OS=="mac"
+                'cflags_cc': [
+                  "-Xclang",
+                  "-load",
+                  "-Xclang",
+                  "<(source_root)/<(make_clang_dir)/lib/libFindBadConstructs.so",
+                  "-Xclang",
+                  "-add-plugin",
+                  "-Xclang",
+                  "find-bad-constructs",
+                  "-Xclang",
+                  "-plugin-arg-find-bad-constructs",
+                  "-Xclang",
+                  "check-auto-raw-pointer",
+                ],
+              }],
+            ],
+          }],
           ['OS=="mac" and _type in ["executable", "shared_library"]', {
             'xcode_settings': {
               # On some machines setting CLANG_CXX_LIBRARY doesn't work for

@@ -32,7 +32,6 @@
 #include "net/url_request/url_request.h"
 #endif  // defined(ENABLE_PDF_VIEWER)
 
-
 using content::BrowserThread;
 
 namespace atom {
@@ -58,7 +57,7 @@ void HandleExternalProtocolInUI(
   if (!web_contents)
     return;
 
-  auto permission_helper =
+  auto* permission_helper =
       WebContentsPermissionHelper::FromWebContents(web_contents);
   if (!permission_helper)
     return;
@@ -118,9 +117,9 @@ bool AtomResourceDispatcherHostDelegate::HandleExternalProtocol(
     const GURL& url,
     content::ResourceRequestInfo* info) {
   BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
-                          base::Bind(&HandleExternalProtocolInUI, url,
-                                     info->GetWebContentsGetterForRequest(),
-                                     info->HasUserGesture()));
+                          base::BindOnce(&HandleExternalProtocolInUI, url,
+                                         info->GetWebContentsGetterForRequest(),
+                                         info->HasUserGesture()));
   return true;
 }
 

@@ -16,7 +16,6 @@
 #include "atom/common/api/atom_bindings.h"
 #include "atom/common/asar/asar_util.h"
 #include "atom/common/node_bindings.h"
-#include "atom/common/node_includes.h"
 #include "base/command_line.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/browser_process.h"
@@ -35,6 +34,15 @@
 #if defined(ENABLE_PDF_VIEWER)
 #include "atom/browser/atom_web_ui_controller_factory.h"
 #endif  // defined(ENABLE_PDF_VIEWER)
+
+#if defined(OS_MACOSX)
+#include "atom/browser/ui/cocoa/views_delegate_mac.h"
+#else
+#include "brightray/browser/views/views_delegate.h"
+#endif
+
+// Must be included after all other headers.
+#include "atom/common/node_includes.h"
 
 namespace atom {
 
@@ -56,7 +64,7 @@ class AtomGeolocationDelegate : public device::GeolocationDelegate {
   DISALLOW_COPY_AND_ASSIGN(AtomGeolocationDelegate);
 };
 
-template<typename T>
+template <typename T>
 void Erase(T* container, typename T::iterator iter) {
   container->erase(iter);
 }
@@ -76,8 +84,8 @@ AtomBrowserMainParts::AtomBrowserMainParts()
   DCHECK(!self_) << "Cannot have two AtomBrowserMainParts";
   self_ = this;
   // Register extension scheme as web safe scheme.
-  content::ChildProcessSecurityPolicy::GetInstance()->
-      RegisterWebSafeScheme("chrome-extension");
+  content::ChildProcessSecurityPolicy::GetInstance()->RegisterWebSafeScheme(
+      "chrome-extension");
 }
 
 AtomBrowserMainParts::~AtomBrowserMainParts() {
@@ -85,10 +93,11 @@ AtomBrowserMainParts::~AtomBrowserMainParts() {
   // Leak the JavascriptEnvironment on exit.
   // This is to work around the bug that V8 would be waiting for background
   // tasks to finish on exit, while somehow it waits forever in Electron, more
-  // about this can be found at https://github.com/electron/electron/issues/4767.
-  // On the other handle there is actually no need to gracefully shutdown V8
-  // on exit in the main process, we already ensured all necessary resources get
-  // cleaned up, and it would make quitting faster.
+  // about this can be found at
+  // https://github.com/electron/electron/issues/4767. On the other handle there
+  // is actually no need to gracefully shutdown V8 on exit in the main process,
+  // we already ensured all necessary resources get cleaned up, and it would
+  // make quitting faster.
   ignore_result(js_env_.release());
 }
 
@@ -163,11 +172,20 @@ int AtomBrowserMainParts::PreCreateThreads() {
         brightray::BrowserClient::Get()->GetApplicationLocale());
   }
 
-  #if defined(OS_MACOSX)
-    ui::InitIdleMonitor();
-  #endif
+#if defined(OS_MACOSX)
+  ui::InitIdleMonitor();
+#endif
 
   return result;
+}
+
+void AtomBrowserMainParts::ToolkitInitialized() {
+  brightray::BrowserMainParts::ToolkitInitialized();
+#if defined(OS_MACOSX)
+  views_delegate_.reset(new ViewsDelegateMac);
+#else
+  views_delegate_.reset(new brightray::ViewsDelegate);
+#endif
 }
 
 void AtomBrowserMainParts::PreMainMessageLoopRun() {
@@ -183,10 +201,9 @@ void AtomBrowserMainParts::PreMainMessageLoopRun() {
 #endif
 
   // Start idle gc.
-  gc_timer_.Start(
-      FROM_HERE, base::TimeDelta::FromMinutes(1),
-      base::Bind(&v8::Isolate::LowMemoryNotification,
-                 base::Unretained(js_env_->isolate())));
+  gc_timer_.Start(FROM_HERE, base::TimeDelta::FromMinutes(1),
+                  base::Bind(&v8::Isolate::LowMemoryNotification,
+                             base::Unretained(js_env_->isolate())));
 
 #if defined(ENABLE_PDF_VIEWER)
   content::WebUIControllerFactory::RegisterFactory(

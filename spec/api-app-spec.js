@@ -1,4 +1,6 @@
 const assert = require('assert')
+const chai = require('chai')
+const chaiAsPromised = require('chai-as-promised')
 const ChildProcess = require('child_process')
 const https = require('https')
 const net = require('net')
@@ -7,9 +9,12 @@ const path = require('path')
 const {ipcRenderer, remote} = require('electron')
 const {closeWindow} = require('./window-helpers')
 
+const {expect} = chai
 const {app, BrowserWindow, Menu, ipcMain} = remote
 
 const isCI = remote.getGlobal('isCi')
+
+chai.use(chaiAsPromised)
 
 describe('electron module', () => {
   it('does not expose internal modules to require', () => {
@@ -113,6 +118,12 @@ describe('app module', () => {
     })
   })
 
+  describe('app.isPackaged', () => {
+    it('should be false durings tests', () => {
+      assert.equal(app.isPackaged, false)
+    })
+  })
+
   describe('app.isInApplicationsFolder()', () => {
     before(function () {
       if (process.platform !== 'darwin') {
@@ -180,7 +191,29 @@ describe('app module', () => {
     })
   })
 
+  // TODO(MarshallOfSound) - Remove in 4.0.0
   describe('app.makeSingleInstance', () => {
+    it('prevents the second launch of app', function (done) {
+      this.timeout(120000)
+      const appPath = path.join(__dirname, 'fixtures', 'api', 'singleton-old')
+      // First launch should exit with 0.
+      const first = ChildProcess.spawn(remote.process.execPath, [appPath])
+      first.once('exit', (code) => {
+        assert.equal(code, 0)
+      })
+      // Start second app when received output.
+      first.stdout.once('data', () => {
+        // Second launch should exit with 1.
+        const second = ChildProcess.spawn(remote.process.execPath, [appPath])
+        second.once('exit', (code) => {
+          assert.equal(code, 1)
+          done()
+        })
+      })
+    })
+  })
+
+  describe('app.requestSingleInstanceLock', () => {
     it('prevents the second launch of app', function (done) {
       this.timeout(120000)
       const appPath = path.join(__dirname, 'fixtures', 'api', 'singleton')
@@ -901,6 +934,17 @@ describe('app module', () => {
       app.dock.setMenu(new Menu())
       const v8Util = process.atomBinding('v8_util')
       v8Util.requestGarbageCollectionForTesting()
+    })
+  })
+
+  describe('whenReady', () => {
+    it('returns a Promise', () => {
+      expect(app.whenReady()).to.be.an.instanceOf(Promise)
+    })
+
+    it('becomes fulfilled if the app is already ready', () => {
+      assert(app.isReady())
+      return expect(app.whenReady()).to.be.eventually.fulfilled
     })
   })
 })

@@ -15,7 +15,7 @@
 #include "brightray/browser/inspectable_web_contents_view_delegate.h"
 #include "content/public/browser/web_contents_delegate.h"
 
-#if defined(TOOLKIT_VIEWS)
+#if defined(TOOLKIT_VIEWS) && !defined(OS_MACOSX)
 #include "atom/browser/ui/autofill_popup.h"
 #endif
 
@@ -33,7 +33,7 @@ class CommonWebContentsDelegate
       public brightray::InspectableWebContentsViewDelegate {
  public:
   CommonWebContentsDelegate();
-  virtual ~CommonWebContentsDelegate();
+  ~CommonWebContentsDelegate() override;
 
   // Creates a InspectableWebContents object and takes onwership of
   // |web_contents|.
@@ -91,13 +91,12 @@ class CommonWebContentsDelegate
       const content::NativeWebKeyboardEvent& event) override;
 
   // Autofill related events.
-#if defined(TOOLKIT_VIEWS)
-  void ShowAutofillPopup(
-    bool offscreen,
-    content::RenderFrameHost* frame_host,
-    const gfx::RectF& bounds,
-    const std::vector<base::string16>& values,
-    const std::vector<base::string16>& labels);
+#if defined(TOOLKIT_VIEWS) && !defined(OS_MACOSX)
+  void ShowAutofillPopup(bool offscreen,
+                         content::RenderFrameHost* frame_host,
+                         const gfx::RectF& bounds,
+                         const std::vector<base::string16>& values,
+                         const std::vector<base::string16>& labels);
   void HideAutofillPopup();
 #endif
 
@@ -119,12 +118,12 @@ class CommonWebContentsDelegate
                             const std::string& query) override;
 
   // brightray::InspectableWebContentsViewDelegate:
-#if defined(TOOLKIT_VIEWS)
+#if defined(TOOLKIT_VIEWS) && !defined(OS_MACOSX)
   gfx::ImageSkia GetDevToolsWindowIcon() override;
 #endif
 #if defined(USE_X11)
-  void GetDevToolsWindowWMClass(
-      std::string* name, std::string* class_name) override;
+  void GetDevToolsWindowWMClass(std::string* name,
+                                std::string* class_name) override;
 #endif
 
   // Destroy the managed InspectableWebContents object.
@@ -166,7 +165,7 @@ class CommonWebContentsDelegate
   bool native_fullscreen_;
 
   // UI related helper classes.
-#if defined(TOOLKIT_VIEWS)
+#if defined(TOOLKIT_VIEWS) && !defined(OS_MACOSX)
   std::unique_ptr<AutofillPopup> autofill_popup_;
 #endif
   std::unique_ptr<WebDialogHelper> web_dialog_helper_;
@@ -187,10 +186,9 @@ class CommonWebContentsDelegate
   PathsMap saved_files_;
 
   // Map id to index job, used for file system indexing requests from devtools.
-  typedef std::map<
-      int,
-      scoped_refptr<DevToolsFileSystemIndexer::FileSystemIndexingJob>>
-      DevToolsIndexingJobsMap;
+  typedef std::
+      map<int, scoped_refptr<DevToolsFileSystemIndexer::FileSystemIndexingJob>>
+          DevToolsIndexingJobsMap;
   DevToolsIndexingJobsMap devtools_indexing_jobs_;
 
   DISALLOW_COPY_AND_ASSIGN(CommonWebContentsDelegate);

@@ -45,22 +45,23 @@ bool IsBrowserProcess(base::CommandLine* cmd) {
 }
 
 #if defined(OS_WIN)
-void InvalidParameterHandler(const wchar_t*, const wchar_t*, const wchar_t*,
-                             unsigned int, uintptr_t) {
+void InvalidParameterHandler(const wchar_t*,
+                             const wchar_t*,
+                             const wchar_t*,
+                             unsigned int,
+                             uintptr_t) {
   // noop.
 }
 #endif
 
 }  // namespace
 
-AtomMainDelegate::AtomMainDelegate() {
-}
+AtomMainDelegate::AtomMainDelegate() {}
 
-AtomMainDelegate::~AtomMainDelegate() {
-}
+AtomMainDelegate::~AtomMainDelegate() {}
 
 bool AtomMainDelegate::BasicStartupComplete(int* exit_code) {
-  auto command_line = base::CommandLine::ForCurrentProcess();
+  auto* command_line = base::CommandLine::ForCurrentProcess();
 
   logging::LoggingSettings settings;
 #if defined(OS_WIN)
@@ -77,7 +78,7 @@ bool AtomMainDelegate::BasicStartupComplete(int* exit_code) {
 #else
   settings.logging_dest = logging::LOG_TO_SYSTEM_DEBUG_LOG;
 #endif  // defined(DEBUG)
-#else  // defined(OS_WIN)
+#else   // defined(OS_WIN)
   settings.logging_dest = logging::LOG_TO_SYSTEM_DEBUG_LOG;
 #endif  // !defined(OS_WIN)
 
@@ -128,9 +129,9 @@ bool AtomMainDelegate::BasicStartupComplete(int* exit_code) {
 void AtomMainDelegate::PreSandboxStartup() {
   brightray::MainDelegate::PreSandboxStartup();
 
-  auto command_line = base::CommandLine::ForCurrentProcess();
-  std::string process_type = command_line->GetSwitchValueASCII(
-      ::switches::kProcessType);
+  auto* command_line = base::CommandLine::ForCurrentProcess();
+  std::string process_type =
+      command_line->GetSwitchValueASCII(::switches::kProcessType);
 
   // Only append arguments for browser process.
   if (!IsBrowserProcess(command_line))
@@ -162,11 +163,11 @@ content::ContentBrowserClient* AtomMainDelegate::CreateContentBrowserClient() {
 }
 
 content::ContentRendererClient*
-    AtomMainDelegate::CreateContentRendererClient() {
+AtomMainDelegate::CreateContentRendererClient() {
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-        switches::kEnableSandbox) ||
+          switches::kEnableSandbox) ||
       !base::CommandLine::ForCurrentProcess()->HasSwitch(
-        ::switches::kNoSandbox)) {
+          ::switches::kNoSandbox)) {
     renderer_client_.reset(new AtomSandboxedRendererClient);
   } else {
     renderer_client_.reset(new AtomRendererClient);

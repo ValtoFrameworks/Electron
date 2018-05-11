@@ -8,8 +8,8 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/single_thread_task_runner.h"
+#include "uv.h"  // NOLINT(build/include)
 #include "v8/include/v8.h"
-#include "vendor/node/deps/uv/include/uv.h"
 
 namespace base {
 class MessageLoop;
@@ -18,7 +18,7 @@ class MessageLoop;
 namespace node {
 class Environment;
 class MultiIsolatePlatform;
-}
+}  // namespace node
 
 namespace atom {
 
@@ -84,7 +84,7 @@ class NodeBindings {
 
  private:
   // Thread to poll uv events.
-  static void EmbedThreadRunner(void *arg);
+  static void EmbedThreadRunner(void* arg);
 
   // Whether the libuv loop has ended.
   bool embed_closed_;

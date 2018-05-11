@@ -15,7 +15,7 @@ namespace brightray {
 class NetworkDelegate : public net::NetworkDelegate {
  public:
   NetworkDelegate();
-  virtual ~NetworkDelegate();
+  ~NetworkDelegate() override;
 
  protected:
   int OnBeforeURLRequest(net::URLRequest* request,
@@ -45,8 +45,7 @@ class NetworkDelegate : public net::NetworkDelegate {
                           int64_t bytes_sent) override;
   void OnCompleted(net::URLRequest* request, bool started) override;
   void OnURLRequestDestroyed(net::URLRequest* request) override;
-  void OnPACScriptError(int line_number,
-                        const base::string16& error) override;
+  void OnPACScriptError(int line_number, const base::string16& error) override;
   AuthRequiredResponse OnAuthRequired(
       net::URLRequest* request,
       const net::AuthChallengeInfo& auth_info,

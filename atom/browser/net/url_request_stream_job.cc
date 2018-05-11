@@ -28,6 +28,8 @@ URLRequestStreamJob::URLRequestStreamJob(net::URLRequest* request,
       response_headers_(nullptr),
       weak_factory_(this) {}
 
+URLRequestStreamJob::~URLRequestStreamJob() = default;
+
 void URLRequestStreamJob::BeforeStartInUI(v8::Isolate* isolate,
                                           v8::Local<v8::Value> value) {
   if (value->IsNull() || value->IsUndefined() || !value->IsObject()) {
@@ -118,8 +120,9 @@ void URLRequestStreamJob::OnError(mate::Arguments* args) {
 int URLRequestStreamJob::ReadRawData(net::IOBuffer* dest, int dest_size) {
   content::BrowserThread::PostTask(
       content::BrowserThread::UI, FROM_HERE,
-      base::Bind(&URLRequestStreamJob::CopyMoreData, weak_factory_.GetWeakPtr(),
-                 WrapRefCounted(dest), dest_size));
+      base::BindOnce(&URLRequestStreamJob::CopyMoreData,
+                     weak_factory_.GetWeakPtr(), WrapRefCounted(dest),
+                     dest_size));
   return net::ERR_IO_PENDING;
 }
 
@@ -166,8 +169,8 @@ void URLRequestStreamJob::CopyMoreData(scoped_refptr<net::IOBuffer> io_buf,
     int status = (errored_ && !read_count) ? net::ERR_FAILED : read_count;
     content::BrowserThread::PostTask(
         content::BrowserThread::IO, FROM_HERE,
-        base::Bind(&URLRequestStreamJob::CopyMoreDataDone,
-                   weak_factory_.GetWeakPtr(), io_buf, status));
+        base::BindOnce(&URLRequestStreamJob::CopyMoreDataDone,
+                       weak_factory_.GetWeakPtr(), io_buf, status));
   }
 }
 

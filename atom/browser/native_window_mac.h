@@ -12,21 +12,30 @@
 
 #include "atom/browser/native_window.h"
 #include "base/mac/scoped_nsobject.h"
+#include "ui/views/controls/native/native_view_host.h"
 
 @class AtomNSWindow;
 @class AtomNSWindowDelegate;
+@class AtomPreviewItem;
+@class AtomTouchBar;
+@class CustomWindowButtonView;
 @class FullSizeContentView;
+
+namespace views {
+class NativeViewHost;
+}
 
 namespace atom {
 
+class RootViewMac;
+
 class NativeWindowMac : public NativeWindow {
  public:
-  NativeWindowMac(brightray::InspectableWebContents* inspectable_web_contents,
-                  const mate::Dictionary& options,
-                  NativeWindow* parent);
+  NativeWindowMac(const mate::Dictionary& options, NativeWindow* parent);
   ~NativeWindowMac() override;
 
   // NativeWindow:
+  void SetContentView(brightray::InspectableWebContents* web_contents) override;
   void Close() override;
   void CloseImmediately() override;
   void Focus(bool focus) override;
@@ -53,10 +62,10 @@ class NativeWindowMac : public NativeWindow {
   void MoveTop() override;
   bool IsResizable() override;
   void SetMovable(bool movable) override;
-  void SetAspectRatio(double aspect_ratio, const gfx::Size& extra_size)
-    override;
-  void PreviewFile(const std::string& path, const std::string& display_name)
-    override;
+  void SetAspectRatio(double aspect_ratio,
+                      const gfx::Size& extra_size) override;
+  void PreviewFile(const std::string& path,
+                   const std::string& display_name) override;
   void CloseFilePreview() override;
   bool IsMovable() override;
   void SetMinimizable(bool minimizable) override;
@@ -67,8 +76,10 @@ class NativeWindowMac : public NativeWindow {
   bool IsFullScreenable() override;
   void SetClosable(bool closable) override;
   bool IsClosable() override;
-  void SetAlwaysOnTop(bool top, const std::string& level,
-                      int relativeLevel, std::string* error) override;
+  void SetAlwaysOnTop(bool top,
+                      const std::string& level,
+                      int relativeLevel,
+                      std::string* error) override;
   bool IsAlwaysOnTop() override;
   void Center() override;
   void Invalidate() override;
@@ -118,8 +129,8 @@ class NativeWindowMac : public NativeWindow {
   void RefreshTouchBarItem(const std::string& item_id) override;
   void SetEscapeTouchBarItem(const mate::PersistentDictionary& item) override;
 
-  gfx::Rect ContentBoundsToWindowBounds(const gfx::Rect& bounds) const;
-  gfx::Rect WindowBoundsToContentBounds(const gfx::Rect& bounds) const;
+  gfx::Rect ContentBoundsToWindowBounds(const gfx::Rect& bounds) const override;
+  gfx::Rect WindowBoundsToContentBounds(const gfx::Rect& bounds) const override;
 
   // Set the attribute of NSWindow while work around a bug of zoom button.
   void SetStyleMask(bool on, NSUInteger flag);
@@ -133,34 +144,48 @@ class NativeWindowMac : public NativeWindow {
   };
   TitleBarStyle title_bar_style() const { return title_bar_style_; }
 
+  views::View* content_view() { return content_view_; }
+  AtomPreviewItem* preview_item() const { return preview_item_.get(); }
+  AtomTouchBar* touch_bar() const { return touch_bar_.get(); }
   bool zoom_to_page_width() const { return zoom_to_page_width_; }
   bool fullscreen_window_title() const { return fullscreen_window_title_; }
   bool simple_fullscreen() const { return always_simple_fullscreen_; }
+
+ protected:
+  // views::WidgetDelegate:
+  bool CanResize() const override;
+  views::View* GetContentsView() override;
 
  private:
   void InternalSetParentWindow(NativeWindow* parent, bool attach);
   void ShowWindowButton(NSWindowButton button);
 
-  void InstallView(NSView* view);
-
   void SetForwardMouseMessages(bool forward);
 
-  base::scoped_nsobject<AtomNSWindow> window_;
+  AtomNSWindow* window_;  // Weak ref, managed by widget_.
+
   base::scoped_nsobject<AtomNSWindowDelegate> window_delegate_;
+  base::scoped_nsobject<AtomPreviewItem> preview_item_;
+  base::scoped_nsobject<AtomTouchBar> touch_bar_;
+  base::scoped_nsobject<CustomWindowButtonView> buttons_view_;
 
   // Event monitor for scroll wheel event.
   id wheel_event_monitor_;
 
   // The view that will fill the whole frameless window.
-  base::scoped_nsobject<FullSizeContentView> content_view_;
+  base::scoped_nsobject<FullSizeContentView> container_view_;
+
+  // The view that fills the client area.
+  std::unique_ptr<RootViewMac> root_view_;
+
+  // The content view, managed by widget_.
+  views::NativeViewHost* content_view_;
 
   bool is_kiosk_;
-
   bool was_fullscreen_;
-
   bool zoom_to_page_width_;
-
   bool fullscreen_window_title_;
+  bool resizable_;
 
   NSInteger attention_request_id_;  // identifier from requestUserAttention
 

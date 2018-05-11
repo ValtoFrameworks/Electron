@@ -13,9 +13,9 @@
 #include "chrome/renderer/spellchecker/spellcheck_worditerator.h"
 #include "native_mate/converter.h"
 #include "native_mate/dictionary.h"
-#include "third_party/icu/source/common/unicode/uscript.h"
 #include "third_party/WebKit/public/web/WebTextCheckingCompletion.h"
 #include "third_party/WebKit/public/web/WebTextCheckingResult.h"
+#include "third_party/icu/source/common/unicode/uscript.h"
 
 namespace atom {
 
@@ -236,6 +236,8 @@ SpellCheckClient::SpellCheckScope::SpellCheckScope(
           v8::Local<v8::Context>::New(client.isolate_, client.context_)),
       provider_(client.provider_.NewHandle()),
       spell_check_(client.spell_check_.NewHandle()) {}
+
+SpellCheckClient::SpellCheckScope::~SpellCheckScope() = default;
 
 }  // namespace api
 

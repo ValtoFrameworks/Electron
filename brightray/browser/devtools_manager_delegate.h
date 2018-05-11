@@ -18,14 +18,13 @@ class DevToolsManagerDelegate : public content::DevToolsManagerDelegate {
   static void StartHttpHandler();
 
   DevToolsManagerDelegate();
-  virtual ~DevToolsManagerDelegate();
+  ~DevToolsManagerDelegate() override;
 
   // DevToolsManagerDelegate implementation.
   void Inspect(content::DevToolsAgentHost* agent_host) override;
-  bool HandleCommand(
-      content::DevToolsAgentHost* agent_host,
-      int session_id,
-      base::DictionaryValue* command) override;
+  bool HandleCommand(content::DevToolsAgentHost* agent_host,
+                     int session_id,
+                     base::DictionaryValue* command) override;
   scoped_refptr<content::DevToolsAgentHost> CreateNewTarget(
       const GURL& url) override;
   std::string GetDiscoveryPageHTML() override;

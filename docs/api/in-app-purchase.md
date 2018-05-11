@@ -15,7 +15,7 @@ Emitted when one or more transactions have been updated.
 Returns:
 
 * `event` Event
-* `transactions` Transaction[] - Array of [`Transaction`](structures/transaction) objects.
+* `transactions` Transaction[] - Array of [`Transaction`](structures/transaction.md) objects.
 
 ## Methods
 
@@ -35,13 +35,13 @@ You should listen for the `transactions-updated` event as soon as possible and c
 
 * `productIDs` String[] - The identifiers of the products to get.
 * `callback` Function - The callback called with the products or an empty array if the products don't exist.
-    * `products` Product[] - Array of [`Product`](structures/product) objects
+    * `products` Product[] - Array of [`Product`](structures/product.md) objects
 
 Retrieves the product descriptions.
 
 ### `inAppPurchase.canMakePayments()`
 
-Returns `true` if the user can make a payment and `false` otherwise.
+Returns `Boolean`, whether a user can make a payment.
 
 ### `inAppPurchase.getReceiptURL()`
 

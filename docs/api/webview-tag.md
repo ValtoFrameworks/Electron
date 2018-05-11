@@ -222,7 +222,7 @@ Special values `yes` and `1` are interpreted as `true`, while `no` and `0` are i
 
 A list of strings which specifies the blink features to be enabled separated by `,`.
 The full list of supported feature strings can be found in the
-[RuntimeEnabledFeatures.json5][blink-feature-string] file.
+[RuntimeEnabledFeatures.json5][runtime-enabled-features] file.
 
 ### `disableblinkfeatures`
 
@@ -232,7 +232,7 @@ The full list of supported feature strings can be found in the
 
 A list of strings which specifies the blink features to be disabled separated by `,`.
 The full list of supported feature strings can be found in the
-[RuntimeEnabledFeatures.json5][blink-feature-string] file.
+[RuntimeEnabledFeatures.json5][runtime-enabled-features] file.
 
 ### `guestinstance`
 
@@ -306,7 +306,7 @@ webview.addEventListener('dom-ready', () => {
 
 * `url` URL
 * `options` Object (optional)
-  * `httpReferrer` String (optional) - An HTTP Referrer url.
+  * `httpReferrer` (String | [Referrer](structures/referrer.md)) (optional) - An HTTP Referrer url.
   * `userAgent` String (optional) - A user agent originating the request.
   * `extraHeaders` String (optional) - Extra headers separated by "\n"
   * `postData` ([UploadRawData[]](structures/upload-raw-data.md) | [UploadFile[]](structures/upload-file.md) | [UploadFileSystem[]](structures/upload-file-system.md) | [UploadBlob[]](structures/upload-blob.md)) (optional) -
@@ -663,7 +663,7 @@ Corresponds to the points in time when the spinner of the tab starts spinning.
 
 Corresponds to the points in time when the spinner of the tab stops spinning.
 
-### Event: 'did-get-response-details'
+### Event: 'did-get-response-details' *(Deprecated)*
 
 Returns:
 
@@ -679,7 +679,8 @@ Returns:
 Fired when details regarding a requested resource is available.
 `status` indicates socket connection to download the resource.
 
-### Event: 'did-get-redirect-request'
+**Deprecated**: This event has been deprecated. Use the [`webRequest`](web-request.md) module which provides similar navigation details on a subscription basis.
+### Event: 'did-get-redirect-request' *(Deprecated)*
 
 Returns:
 
@@ -688,7 +689,7 @@ Returns:
 * `isMainFrame` Boolean
 
 Fired when a redirect was received while requesting a resource.
-
+**Deprecated**: This event has been deprecated. Use the [`webRequest`](web-request.md) module which provides similar navigation details on a subscription basis.
 ### Event: 'dom-ready'
 
 Fired when document in the given frame is loaded.
@@ -857,7 +858,7 @@ Returns:
 
 Fired when the guest page has sent an asynchronous message to embedder page.
 
-With `sendToHost` method and `ipc-message` event you can easily communicate
+With `sendToHost` method and `ipc-message` event you can communicate
 between guest page and embedder page:
 
 ```javascript
@@ -939,4 +940,4 @@ Emitted when DevTools is closed.
 
 Emitted when DevTools is focused / opened.
 
-[blink-feature-string]: https://cs.chromium.org/chromium/src/third_party/WebKit/Source/platform/RuntimeEnabledFeatures.json5?l=62
+[runtime-enabled-features]: https://cs.chromium.org/chromium/src/third_party/blink/renderer/platform/runtime_enabled_features.json5?l=70

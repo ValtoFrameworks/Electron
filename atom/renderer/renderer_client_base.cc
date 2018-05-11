@@ -17,7 +17,6 @@
 #include "atom/renderer/guest_view_container.h"
 #include "atom/renderer/preferences_manager.h"
 #include "base/command_line.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/string_split.h"
 #include "chrome/renderer/media/chrome_key_systems.h"
 #include "chrome/renderer/pepper/pepper_helper.h"
@@ -52,7 +51,8 @@ namespace atom {
 namespace {
 
 v8::Local<v8::Value> GetRenderProcessPreferences(
-    const PreferencesManager* preferences_manager, v8::Isolate* isolate) {
+    const PreferencesManager* preferences_manager,
+    v8::Isolate* isolate) {
   if (preferences_manager->preferences())
     return mate::ConvertToV8(isolate, *preferences_manager->preferences());
   else
@@ -62,8 +62,8 @@ v8::Local<v8::Value> GetRenderProcessPreferences(
 std::vector<std::string> ParseSchemesCLISwitch(const char* switch_name) {
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   std::string custom_schemes = command_line->GetSwitchValueASCII(switch_name);
-  return base::SplitString(
-      custom_schemes, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
+  return base::SplitString(custom_schemes, ",", base::TRIM_WHITESPACE,
+                           base::SPLIT_WANT_NONEMPTY);
 }
 
 }  // namespace
@@ -74,12 +74,11 @@ RendererClientBase::RendererClientBase() {
       ParseSchemesCLISwitch(switches::kStandardSchemes);
   for (const std::string& scheme : standard_schemes_list)
     url::AddStandardScheme(scheme.c_str(), url::SCHEME_WITHOUT_PORT);
-    isolated_world_ = base::CommandLine::ForCurrentProcess()->HasSwitch(
-        switches::kContextIsolation);
+  isolated_world_ = base::CommandLine::ForCurrentProcess()->HasSwitch(
+      switches::kContextIsolation);
 }
 
-RendererClientBase::~RendererClientBase() {
-}
+RendererClientBase::~RendererClientBase() {}
 
 void RendererClientBase::AddRenderBindings(
     v8::Isolate* isolate,
@@ -138,7 +137,7 @@ void RendererClientBase::RenderThreadStarted() {
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   bool scroll_bounce = command_line->HasSwitch(switches::kScrollBounce);
   base::ScopedCFTypeRef<CFStringRef> rubber_banding_key(
-    base::SysUTF8ToCFStringRef("NSScrollViewRubberbanding"));
+      base::SysUTF8ToCFStringRef("NSScrollViewRubberbanding"));
   CFPreferencesSetAppValue(rubber_banding_key,
                            scroll_bounce ? kCFBooleanTrue : kCFBooleanFalse,
                            kCFPreferencesCurrentApplication);
@@ -190,7 +189,7 @@ void RendererClientBase::DidClearWindowObject(
 std::unique_ptr<blink::WebSpeechSynthesizer>
 RendererClientBase::OverrideSpeechSynthesizer(
     blink::WebSpeechSynthesizerClient* client) {
-  return base::MakeUnique<TtsDispatcher>(client);
+  return std::make_unique<TtsDispatcher>(client);
 }
 
 bool RendererClientBase::OverrideCreatePlugin(
@@ -226,7 +225,8 @@ void RendererClientBase::AddSupportedKeySystems(
 }
 
 v8::Local<v8::Context> RendererClientBase::GetContext(
-    blink::WebLocalFrame* frame, v8::Isolate* isolate) {
+    blink::WebLocalFrame* frame,
+    v8::Isolate* isolate) const {
   if (isolated_world())
     return frame->WorldScriptContext(isolate, World::ISOLATED_WORLD);
   else

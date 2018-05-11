@@ -16,7 +16,7 @@ class BrowserContext;
 class WidevineCdmMessageFilter : public content::BrowserMessageFilter {
  public:
   explicit WidevineCdmMessageFilter(int render_process_id,
-      content::BrowserContext* browser_context);
+                                    content::BrowserContext* browser_context);
   bool OnMessageReceived(const IPC::Message& message) override;
   void OnDestruct() const override;
 
@@ -24,7 +24,7 @@ class WidevineCdmMessageFilter : public content::BrowserMessageFilter {
   friend class content::BrowserThread;
   friend class base::DeleteHelper<WidevineCdmMessageFilter>;
 
-  virtual ~WidevineCdmMessageFilter();
+  ~WidevineCdmMessageFilter() override;
 
 #if BUILDFLAG(ENABLE_LIBRARY_CDMS)
   // Returns whether any internal plugin supporting |mime_type| is registered

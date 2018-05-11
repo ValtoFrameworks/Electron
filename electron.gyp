@@ -165,6 +165,9 @@
               # of /SUBSYSTEM:WINDOWS,5.02
               'MinimumRequiredVersion': '5.02',
               'SubSystem': '2',
+              'AdditionalDependencies': [
+                'wtsapi32.lib',
+              ],
             },
           },
           'copies': [
@@ -301,6 +304,7 @@
         '<(libchromiumcontent_src_dir)/third_party/',
         '<(libchromiumcontent_src_dir)/components/cdm',
         '<(libchromiumcontent_src_dir)/third_party/widevine',
+        '<(libchromiumcontent_src_dir)/third_party/widevine/cdm/stub',
         '<(libchromiumcontent_src_dir)/third_party/protobuf/src',
         # The 'third_party/webrtc/modules/desktop_capture/desktop_capture_options.h' is using 'rtc_base/constructormagic.h'.
         '<(libchromiumcontent_src_dir)/third_party/webrtc',
@@ -369,6 +373,10 @@
           'xcode_settings': {
             # ReactiveCocoa which is used by Squirrel requires using __weak.
             'CLANG_ENABLE_OBJC_WEAK': 'YES',
+            'OTHER_CFLAGS': [
+              '-Wunguarded-availability',
+              '-Wobjc-missing-property-synthesis',
+            ],
           },
         }],  # OS=="mac" and mas_build==0
         ['OS=="mac" and mas_build==1', {
@@ -577,6 +585,7 @@
           'action': [
             'python',
             'tools/js2c.py',
+            'vendor/node',
             '<@(_outputs)',
             '<(js2c_input_dir)',
           ],

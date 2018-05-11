@@ -11,13 +11,12 @@
 #include <vector>
 
 #include "atom/browser/native_window_observer.h"
-#include "atom/browser/ui/atom_menu_model.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/supports_user_data.h"
 #include "content/public/browser/web_contents_user_data.h"
 #include "extensions/browser/app_window/size_constraints.h"
-#include "native_mate/persistent_dictionary.h"
+#include "ui/views/widget/widget_delegate.h"
 
 class SkRegion;
 
@@ -35,34 +34,38 @@ class Point;
 class Rect;
 class RectF;
 class Size;
-}
+}  // namespace gfx
 
 namespace mate {
 class Dictionary;
-}
+class PersistentDictionary;
+}  // namespace mate
 
 namespace atom {
 
+class AtomMenuModel;
 class NativeBrowserView;
 
 struct DraggableRegion;
 
-class NativeWindow : public base::SupportsUserData {
+class NativeWindow : public base::SupportsUserData,
+                     public views::WidgetDelegate {
  public:
   ~NativeWindow() override;
 
   // Create window with existing WebContents, the caller is responsible for
   // managing the window's live.
-  static NativeWindow* Create(
-      brightray::InspectableWebContents* inspectable_web_contents,
-      const mate::Dictionary& options,
-      NativeWindow* parent = nullptr);
+  static NativeWindow* Create(const mate::Dictionary& options,
+                              NativeWindow* parent = nullptr);
 
   void InitFromOptions(const mate::Dictionary& options);
 
+  virtual void SetContentView(
+      brightray::InspectableWebContents* web_contents) = 0;
+
   virtual void Close() = 0;
   virtual void CloseImmediately() = 0;
-  virtual bool IsClosed() const { return is_closed_; }
+  virtual bool IsClosed() const;
   virtual void Focus(bool focus) = 0;
   virtual bool IsFocused() = 0;
   virtual void Show() = 0;
@@ -153,15 +156,14 @@ class NativeWindow : public base::SupportsUserData {
 
   // Taskbar/Dock APIs.
   enum ProgressState {
-    PROGRESS_NONE,               // no progress, no marking
-    PROGRESS_INDETERMINATE,      // progress, indeterminate
-    PROGRESS_ERROR,              // progress, errored (red)
-    PROGRESS_PAUSED,             // progress, paused (yellow)
-    PROGRESS_NORMAL,             // progress, not marked (green)
+    PROGRESS_NONE,           // no progress, no marking
+    PROGRESS_INDETERMINATE,  // progress, indeterminate
+    PROGRESS_ERROR,          // progress, errored (red)
+    PROGRESS_PAUSED,         // progress, paused (yellow)
+    PROGRESS_NORMAL,         // progress, not marked (green)
   };
 
-  virtual void SetProgressBar(double progress,
-                              const ProgressState state) = 0;
+  virtual void SetProgressBar(double progress, const ProgressState state) = 0;
   virtual void SetOverlayIcon(const gfx::Image& overlay,
                               const std::string& description) = 0;
 
@@ -250,16 +252,16 @@ class NativeWindow : public base::SupportsUserData {
                                      const base::DictionaryValue& details);
   void NotifyNewWindowForTab();
 
-  #if defined(OS_WIN)
+#if defined(OS_WIN)
   void NotifyWindowMessage(UINT message, WPARAM w_param, LPARAM l_param);
-  #endif
+#endif
 
-  void AddObserver(NativeWindowObserver* obs) {
-    observers_.AddObserver(obs);
-  }
+  void AddObserver(NativeWindowObserver* obs) { observers_.AddObserver(obs); }
   void RemoveObserver(NativeWindowObserver* obs) {
     observers_.RemoveObserver(obs);
   }
+
+  views::Widget* widget() const { return widget_.get(); }
 
   bool has_frame() const { return has_frame_; }
   void set_has_frame(bool has_frame) { has_frame_ = has_frame; }
@@ -272,15 +274,19 @@ class NativeWindow : public base::SupportsUserData {
   bool is_modal() const { return is_modal_; }
 
  protected:
-  NativeWindow(brightray::InspectableWebContents* inspectable_web_contents,
-               const mate::Dictionary& options,
-               NativeWindow* parent);
+  NativeWindow(const mate::Dictionary& options, NativeWindow* parent);
+
+  // views::WidgetDelegate:
+  views::Widget* GetWidget() override;
+  const views::Widget* GetWidget() const override;
 
   void set_browser_view(NativeBrowserView* browser_view) {
     browser_view_ = browser_view;
   }
 
  private:
+  std::unique_ptr<views::Widget> widget_;
+
   // Whether window has standard frame.
   bool has_frame_;
 
@@ -324,11 +330,11 @@ class NativeWindow : public base::SupportsUserData {
 };
 
 // This class provides a hook to get a NativeWindow from a WebContents.
-class NativeWindowRelay :
-    public content::WebContentsUserData<NativeWindowRelay> {
+class NativeWindowRelay
+    : public content::WebContentsUserData<NativeWindowRelay> {
  public:
-  explicit NativeWindowRelay(base::WeakPtr<NativeWindow> window)
-    : key(UserDataKey()), window(window) {}
+  explicit NativeWindowRelay(base::WeakPtr<NativeWindow> window);
+  ~NativeWindowRelay() override;
 
   static void* UserDataKey() {
     return content::WebContentsUserData<NativeWindowRelay>::UserDataKey();

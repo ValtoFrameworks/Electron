@@ -26,18 +26,16 @@ RemoteCallbackFreer::RemoteCallbackFreer(v8::Isolate* isolate,
                                          content::WebContents* web_contents)
     : ObjectLifeMonitor(isolate, target),
       content::WebContentsObserver(web_contents),
-      object_id_(object_id) {
-}
+      object_id_(object_id) {}
 
-RemoteCallbackFreer::~RemoteCallbackFreer() {
-}
+RemoteCallbackFreer::~RemoteCallbackFreer() {}
 
 void RemoteCallbackFreer::RunDestructor() {
   base::string16 channel =
       base::ASCIIToUTF16("ELECTRON_RENDERER_RELEASE_CALLBACK");
   base::ListValue args;
   args.AppendInteger(object_id_);
-  auto frame_host = web_contents()->GetMainFrame();
+  auto* frame_host = web_contents()->GetMainFrame();
   if (frame_host) {
     frame_host->Send(new AtomFrameMsg_Message(frame_host->GetRoutingID(), false,
                                               channel, args));

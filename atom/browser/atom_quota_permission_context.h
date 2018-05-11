@@ -14,15 +14,15 @@ class AtomQuotaPermissionContext : public content::QuotaPermissionContext {
   typedef content::QuotaPermissionContext::QuotaPermissionResponse response;
 
   AtomQuotaPermissionContext();
-  virtual ~AtomQuotaPermissionContext();
 
   // content::QuotaPermissionContext:
-  void RequestQuotaPermission(
-      const content::StorageQuotaParams& params,
-      int render_process_id,
-      const PermissionCallback& callback) override;
+  void RequestQuotaPermission(const content::StorageQuotaParams& params,
+                              int render_process_id,
+                              const PermissionCallback& callback) override;
 
  private:
+  ~AtomQuotaPermissionContext() override;
+
   DISALLOW_COPY_AND_ASSIGN(AtomQuotaPermissionContext);
 };
 

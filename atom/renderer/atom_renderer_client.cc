@@ -23,7 +23,7 @@
 
 #include "atom/common/node_includes.h"
 #include "atom_natives.h"  // NOLINT: This file is generated with js2c
-#include "vendor/node/src/tracing/trace_event.h"
+#include "tracing/trace_event.h"
 
 namespace atom {
 
@@ -39,8 +39,7 @@ bool IsDevToolsExtension(content::RenderFrame* render_frame) {
 AtomRendererClient::AtomRendererClient()
     : node_integration_initialized_(false),
       node_bindings_(NodeBindings::Create(NodeBindings::RENDERER)),
-      atom_bindings_(new AtomBindings(uv_default_loop())) {
-}
+      atom_bindings_(new AtomBindings(uv_default_loop())) {}
 
 AtomRendererClient::~AtomRendererClient() {
   asar::ClearArchives();
@@ -79,7 +78,8 @@ void AtomRendererClient::RunScriptsAtDocumentEnd(
 }
 
 void AtomRendererClient::DidCreateScriptContext(
-    v8::Handle<v8::Context> context, content::RenderFrame* render_frame) {
+    v8::Handle<v8::Context> context,
+    content::RenderFrame* render_frame) {
   // Only allow node integration for the main frame, unless it is a devtools
   // extension page.
   if (!render_frame->IsMainFrame() && !IsDevToolsExtension(render_frame))
@@ -120,7 +120,10 @@ void AtomRendererClient::DidCreateScriptContext(
 }
 
 void AtomRendererClient::WillReleaseScriptContext(
-    v8::Handle<v8::Context> context, content::RenderFrame* render_frame) {
+    v8::Handle<v8::Context> context,
+    content::RenderFrame* render_frame) {
+  if (injected_frames_.find(render_frame) == injected_frames_.end())
+    return;
   injected_frames_.erase(render_frame);
 
   node::Environment* env = node::Environment::GetCurrent(context);
@@ -181,13 +184,14 @@ void AtomRendererClient::SetupMainWorldOverrides(
 
   // Wrap the bundle into a function that receives the binding object as
   // an argument.
-  std::string bundle(node::isolated_bundle_data,
-      node::isolated_bundle_data + sizeof(node::isolated_bundle_data));
-  std::string wrapper = "(function (binding, require) {\n" + bundle + "\n})";
-  auto script = v8::Script::Compile(
-      mate::ConvertToV8(isolate, wrapper)->ToString());
-  auto func = v8::Handle<v8::Function>::Cast(
-      script->Run(context).ToLocalChecked());
+  std::string left = "(function (binding, require) {\n";
+  std::string right = "\n})";
+  auto script = v8::Script::Compile(v8::String::Concat(
+      mate::ConvertToV8(isolate, left)->ToString(),
+      v8::String::Concat(node::isolated_bundle_value.ToStringChecked(isolate),
+                         mate::ConvertToV8(isolate, right)->ToString())));
+  auto func =
+      v8::Handle<v8::Function>::Cast(script->Run(context).ToLocalChecked());
 
   auto binding = v8::Object::New(isolate);
   api::Initialize(binding, v8::Null(isolate), context, nullptr);
@@ -205,7 +209,7 @@ void AtomRendererClient::SetupMainWorldOverrides(
   dict.Set("nativeWindowOpen",
            command_line->HasSwitch(switches::kNativeWindowOpen));
 
-  v8::Local<v8::Value> args[] = { binding };
+  v8::Local<v8::Value> args[] = {binding};
   ignore_result(func->Call(context, v8::Null(isolate), 1, args));
 }
 
@@ -214,8 +218,9 @@ node::Environment* AtomRendererClient::GetEnvironment(
   if (injected_frames_.find(render_frame) == injected_frames_.end())
     return nullptr;
   v8::HandleScope handle_scope(v8::Isolate::GetCurrent());
-  node::Environment* env = node::Environment::GetCurrent(
-      render_frame->GetWebFrame()->MainWorldScriptContext());
+  auto context =
+      GetContext(render_frame->GetWebFrame(), v8::Isolate::GetCurrent());
+  node::Environment* env = node::Environment::GetCurrent(context);
   if (environments_.find(env) == environments_.end())
     return nullptr;
   return env;

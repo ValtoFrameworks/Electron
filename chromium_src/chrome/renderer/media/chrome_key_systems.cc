@@ -20,8 +20,7 @@
 #include "media/base/key_system_properties.h"
 #include "media/media_features.h"
 
-// #include "widevine_cdm_version.h" // In SHARED_INTERMEDIATE_DIR.
-#include "third_party/widevine/cdm/stub/widevine_cdm_version.h"
+#include "widevine_cdm_version.h"  // In SHARED_INTERMEDIATE_DIR.
 
 // The following must be after widevine_cdm_version.h.
 
@@ -44,9 +43,7 @@ static bool IsPepperCdmAvailable(
   bool is_available = false;
   content::RenderThread::Get()->Send(
       new ChromeViewHostMsg_IsInternalPluginAvailableForMimeType(
-          pepper_type,
-          &is_available,
-          additional_param_names,
+          pepper_type, &is_available, additional_param_names,
           additional_param_values));
 
   return is_available;
@@ -181,8 +178,7 @@ void GetSupportedCodecsForPepperCdm(
         base::ASCIIToUTF16(kCdmSupportedCodecsParamName)) {
       const base::string16& codecs_string16 = additional_param_values[i];
       std::string codecs_string;
-      if (!base::UTF16ToUTF8(codecs_string16.c_str(),
-                             codecs_string16.length(),
+      if (!base::UTF16ToUTF8(codecs_string16.c_str(), codecs_string16.length(),
                              &codecs_string)) {
         DLOG(WARNING) << "Non-UTF-8 codecs string.";
         // Continue using the best effort conversion.
@@ -206,8 +202,7 @@ static void AddPepperBasedWidevine(
 
   std::vector<base::string16> additional_param_names;
   std::vector<base::string16> additional_param_values;
-  if (!IsPepperCdmAvailable(kWidevineCdmPluginMimeType,
-                            &additional_param_names,
+  if (!IsPepperCdmAvailable(kWidevineCdmPluginMimeType, &additional_param_names,
                             &additional_param_values)) {
     DVLOG(1) << "Widevine CDM is not currently available.";
     return;
@@ -215,8 +210,7 @@ static void AddPepperBasedWidevine(
 
   std::vector<std::string> codecs;
   GetSupportedCodecsForPepperCdm(additional_param_names,
-                                 additional_param_values,
-                                 &codecs);
+                                 additional_param_values, &codecs);
 
   SupportedCodecs supported_codecs = media::EME_CODEC_NONE;
 
@@ -254,15 +248,15 @@ static void AddPepperBasedWidevine(
           NOT_SUPPORTED,                        // Persistent-release-message.
       media::EmeFeatureSupport::REQUESTABLE,    // Persistent state.
       media::EmeFeatureSupport::REQUESTABLE));  // Distinctive identifier.
-#else   // (Desktop)
-      Robustness::SW_SECURE_CRYPTO,       // Maximum audio robustness.
-      Robustness::SW_SECURE_DECODE,       // Maximum video robustness.
+#else                                           // (Desktop)
+      Robustness::SW_SECURE_CRYPTO,                 // Maximum audio robustness.
+      Robustness::SW_SECURE_DECODE,                 // Maximum video robustness.
       media::EmeSessionTypeSupport::NOT_SUPPORTED,  // persistent-license.
       media::EmeSessionTypeSupport::
           NOT_SUPPORTED,                          // persistent-release-message.
       media::EmeFeatureSupport::REQUESTABLE,      // Persistent state.
       media::EmeFeatureSupport::NOT_SUPPORTED));  // Distinctive identifier.
-#endif  // defined(OS_CHROMEOS)
+#endif                                          // defined(OS_CHROMEOS)
 }
 #endif  // defined(WIDEVINE_CDM_AVAILABLE)
 #endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)

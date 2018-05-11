@@ -17,11 +17,10 @@
 
 namespace atom {
 
-class TrayIconCocoa : public TrayIcon,
-                      public AtomMenuModel::Observer {
+class TrayIconCocoa : public TrayIcon, public AtomMenuModel::Observer {
  public:
   TrayIconCocoa();
-  virtual ~TrayIconCocoa();
+  ~TrayIconCocoa() override;
 
   void SetImage(const gfx::Image& image) override;
   void SetPressedImage(const gfx::Image& image) override;

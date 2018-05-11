@@ -16,7 +16,7 @@
 
 // --------------------------------- Interface --------------------------------
 
-@interface InAppPurchaseProduct : NSObject<SKProductsRequestDelegate> {
+@interface InAppPurchaseProduct : NSObject <SKProductsRequestDelegate> {
  @private
   in_app_purchase::InAppPurchaseProductsCallback callback_;
 }
@@ -159,6 +159,10 @@
 // ============================================================================
 
 namespace in_app_purchase {
+
+Product::Product() = default;
+Product::Product(const Product&) = default;
+Product::~Product() = default;
 
 void GetProducts(const std::vector<std::string>& productIDs,
                  const InAppPurchaseProductsCallback& callback) {

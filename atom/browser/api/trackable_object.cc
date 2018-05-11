@@ -6,7 +6,6 @@
 
 #include "atom/browser/atom_browser_main_parts.h"
 #include "base/bind.h"
-#include "base/memory/ptr_util.h"
 #include "base/supports_user_data.h"
 
 namespace mate {
@@ -35,8 +34,7 @@ TrackableObjectBase::TrackableObjectBase()
       GetDestroyClosure());
 }
 
-TrackableObjectBase::~TrackableObjectBase() {
-}
+TrackableObjectBase::~TrackableObjectBase() {}
 
 base::OnceClosure TrackableObjectBase::GetDestroyClosure() {
   return base::BindOnce(&TrackableObjectBase::Destroy,
@@ -49,14 +47,15 @@ void TrackableObjectBase::Destroy() {
 
 void TrackableObjectBase::AttachAsUserData(base::SupportsUserData* wrapped) {
   wrapped->SetUserData(kTrackedObjectKey,
-      base::MakeUnique<IDUserData>(weak_map_id_));
+                       std::make_unique<IDUserData>(weak_map_id_));
 }
 
 // static
 int32_t TrackableObjectBase::GetIDFromWrappedClass(
     base::SupportsUserData* wrapped) {
   if (wrapped) {
-    auto id = static_cast<IDUserData*>(wrapped->GetUserData(kTrackedObjectKey));
+    auto* id = static_cast<IDUserData*>(
+        wrapped->GetUserData(kTrackedObjectKey));
     if (id)
       return *id;
   }

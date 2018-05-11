@@ -9,7 +9,6 @@
 #include "base/callback.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
-#include "base/memory/ptr_util.h"
 #include "base/values.h"
 #include "content/public/common/content_switches.h"
 #include "net/log/file_net_log_observer.h"
@@ -23,7 +22,7 @@ std::unique_ptr<base::DictionaryValue> GetConstants() {
   std::unique_ptr<base::DictionaryValue> constants = net::GetNetConstants();
 
   // Adding client information to constants dictionary.
-  auto client_info = base::MakeUnique<base::DictionaryValue>();
+  auto client_info = std::make_unique<base::DictionaryValue>();
   client_info->SetString(
       "command_line",
       base::CommandLine::ForCurrentProcess()->GetCommandLineString());
@@ -34,8 +33,7 @@ std::unique_ptr<base::DictionaryValue> GetConstants() {
 
 }  // namespace
 
-NetLog::NetLog() {
-}
+NetLog::NetLog() {}
 
 NetLog::~NetLog() {
   if (file_net_log_observer_) {
@@ -45,7 +43,7 @@ NetLog::~NetLog() {
 }
 
 void NetLog::StartLogging() {
-  auto command_line = base::CommandLine::ForCurrentProcess();
+  auto* command_line = base::CommandLine::ForCurrentProcess();
   if (!command_line->HasSwitch(switches::kLogNetLog))
     return;
 

@@ -23,6 +23,9 @@ const int kDefaultHeight = 300;
 
 }  // namespace
 
+SetSizeParams::SetSizeParams() = default;
+SetSizeParams::~SetSizeParams() = default;
+
 WebViewGuestDelegate::WebViewGuestDelegate()
     : embedder_zoom_controller_(nullptr),
       guest_host_(nullptr),
@@ -31,8 +34,7 @@ WebViewGuestDelegate::WebViewGuestDelegate()
       attached_(false),
       api_web_contents_(nullptr) {}
 
-WebViewGuestDelegate::~WebViewGuestDelegate() {
-}
+WebViewGuestDelegate::~WebViewGuestDelegate() {}
 
 void WebViewGuestDelegate::Initialize(api::WebContents* api_web_contents) {
   api_web_contents_ = api_web_contents;
@@ -62,7 +64,7 @@ void WebViewGuestDelegate::SetSize(const SetSizeParams& params) {
 
   enable_auto_size &= !min_auto_size_.IsEmpty() && !max_auto_size_.IsEmpty();
 
-  auto rvh = web_contents()->GetRenderViewHost();
+  auto* rvh = web_contents()->GetRenderViewHost();
   if (enable_auto_size) {
     // Autosize is being enabled.
     rvh->EnableAutoResize(min_auto_size_, max_auto_size_);
@@ -121,7 +123,7 @@ void WebViewGuestDelegate::DidAttach(int guest_proxy_routing_id) {
 
   embedder_zoom_controller_ =
       WebContentsZoomController::FromWebContents(embedder_web_contents_);
-  auto zoom_controller = api_web_contents_->GetZoomController();
+  auto* zoom_controller = api_web_contents_->GetZoomController();
   embedder_zoom_controller_->AddObserver(this);
   zoom_controller->SetEmbedderZoomController(embedder_zoom_controller_);
 }
@@ -168,9 +170,9 @@ void WebViewGuestDelegate::OnZoomLevelChanged(
 }
 
 void WebViewGuestDelegate::GuestSizeChangedDueToAutoSize(
-    const gfx::Size& old_size, const gfx::Size& new_size) {
-  api_web_contents_->Emit("size-changed",
-                          old_size.width(), old_size.height(),
+    const gfx::Size& old_size,
+    const gfx::Size& new_size) {
+  api_web_contents_->Emit("size-changed", old_size.width(), old_size.height(),
                           new_size.width(), new_size.height());
 }
 
@@ -178,7 +180,7 @@ gfx::Size WebViewGuestDelegate::GetDefaultSize() const {
   if (is_full_page_plugin_) {
     // Full page plugins default to the size of the owner's viewport.
     return embedder_web_contents_->GetRenderWidgetHostView()
-                                 ->GetVisibleViewportSize();
+        ->GetVisibleViewportSize();
   } else {
     return gfx::Size(kDefaultWidth, kDefaultHeight);
   }
@@ -211,8 +213,8 @@ content::WebContents* WebViewGuestDelegate::CreateNewGuestWindow(
   guest_params.initial_size =
       embedder_web_contents_->GetContainerBounds().size();
   guest_params.context = embedder_web_contents_->GetNativeView();
-  auto guest_contents = content::WebContents::Create(guest_params);
-  auto guest_contents_impl =
+  auto* guest_contents = content::WebContents::Create(guest_params);
+  auto* guest_contents_impl =
       static_cast<content::WebContentsImpl*>(guest_contents);
   guest_contents_impl->GetView()->CreateViewForWidget(
       guest_contents->GetRenderViewHost()->GetWidget(), false);

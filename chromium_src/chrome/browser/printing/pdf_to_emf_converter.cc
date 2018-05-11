@@ -17,7 +17,6 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/common/chrome_utility_printing_messages.h"
 #include "content/public/browser/browser_thread.h"
@@ -224,14 +223,14 @@ class PdfConverterUtilityProcessHostClient
 
 std::unique_ptr<MetafilePlayer>
 PdfConverterUtilityProcessHostClient::GetFileFromTemp(
-  std::unique_ptr<base::File, content::BrowserThread::DeleteOnFileThread>
-      temp_file) {
+    std::unique_ptr<base::File, content::BrowserThread::DeleteOnFileThread>
+        temp_file) {
   if (settings_.mode == PdfRenderSettings::Mode::POSTSCRIPT_LEVEL2 ||
       settings_.mode == PdfRenderSettings::Mode::POSTSCRIPT_LEVEL3) {
-    return base::MakeUnique<PostScriptMetaFile>(temp_dir_,
+    return std::make_unique<PostScriptMetaFile>(temp_dir_,
                                                 std::move(temp_file));
   }
-  return base::MakeUnique<LazyEmf>(temp_dir_, std::move(temp_file));
+  return std::make_unique<LazyEmf>(temp_dir_, std::move(temp_file));
 }
 
 class PdfConverterImpl : public PdfConverter {
@@ -279,12 +278,10 @@ ScopedTempFile CreateTempFile(scoped_refptr<RefCountedTempDir>* temp_dir) {
                 << (*temp_dir)->GetPath().value();
     return file;
   }
-  file.reset(new base::File(path,
-                            base::File::FLAG_CREATE_ALWAYS |
-                            base::File::FLAG_WRITE |
-                            base::File::FLAG_READ |
-                            base::File::FLAG_DELETE_ON_CLOSE |
-                            base::File::FLAG_TEMPORARY));
+  file.reset(new base::File(
+      path, base::File::FLAG_CREATE_ALWAYS | base::File::FLAG_WRITE |
+                base::File::FLAG_READ | base::File::FLAG_DELETE_ON_CLOSE |
+                base::File::FLAG_TEMPORARY));
   if (!file->IsValid()) {
     PLOG(ERROR) << "Failed to create " << path.value();
     file.reset();
@@ -345,8 +342,7 @@ bool LazyEmf::LoadEmf(Emf* emf) const {
   return emf->InitFromData(data.data(), data.size());
 }
 
-PostScriptMetaFile::~PostScriptMetaFile() {
-}
+PostScriptMetaFile::~PostScriptMetaFile() {}
 
 bool PostScriptMetaFile::SafePlayback(HDC hdc) const {
   // TODO(thestig): Fix destruction of metafiles. For some reasons
@@ -527,7 +523,6 @@ void PdfConverterUtilityProcessHostClient::OnFailed() {
   utility_process_host_.reset();
 }
 
-
 void PdfConverterUtilityProcessHostClient::OnPreCacheFontCharacters(
     const LOGFONT& font,
     const base::string16& str) {
@@ -604,12 +599,12 @@ PdfConverterImpl::~PdfConverterImpl() {
 }
 
 void PdfConverterImpl::Start(
-      const scoped_refptr<PdfConverterUtilityProcessHostClient>& utility_client,
-      const scoped_refptr<base::RefCountedMemory>& data,
-      const StartCallback& start_callback) {
-    DCHECK(!utility_client_);
-    utility_client_ = utility_client;
-    utility_client_->Start(data, start_callback);
+    const scoped_refptr<PdfConverterUtilityProcessHostClient>& utility_client,
+    const scoped_refptr<base::RefCountedMemory>& data,
+    const StartCallback& start_callback) {
+  DCHECK(!utility_client_);
+  utility_client_ = utility_client;
+  utility_client_->Start(data, start_callback);
 }
 
 void PdfConverterImpl::GetPage(int page_number,
@@ -632,11 +627,10 @@ std::unique_ptr<PdfConverter> PdfConverter::StartPdfConverter(
     const PdfRenderSettings& conversion_settings,
     const StartCallback& start_callback) {
   std::unique_ptr<PdfConverterImpl> converter =
-      base::MakeUnique<PdfConverterImpl>();
-  converter->Start(
-      new PdfConverterUtilityProcessHostClient(converter->GetWeakPtr(),
-                                               conversion_settings),
-          data, start_callback);
+      std::make_unique<PdfConverterImpl>();
+  converter->Start(new PdfConverterUtilityProcessHostClient(
+                       converter->GetWeakPtr(), conversion_settings),
+                   data, start_callback);
   return std::move(converter);
 }
 

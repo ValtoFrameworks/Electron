@@ -51,13 +51,18 @@ BrowserClient* BrowserClient::Get() {
   return g_browser_client;
 }
 
-BrowserClient::BrowserClient()
-    : browser_main_parts_(nullptr) {
+BrowserClient::BrowserClient() : browser_main_parts_(nullptr) {
   DCHECK(!g_browser_client);
   g_browser_client = this;
 }
 
-BrowserClient::~BrowserClient() {
+BrowserClient::~BrowserClient() {}
+
+
+void BrowserClient::WebNotificationAllowed(
+    int render_process_id,
+    const base::Callback<void(bool, bool)>& callback) {
+  callback.Run(false, true);
 }
 
 NotificationPresenter* BrowserClient::GetNotificationPresenter() {

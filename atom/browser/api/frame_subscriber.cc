@@ -25,8 +25,9 @@ FrameSubscriber::FrameSubscriber(v8::Isolate* isolate,
       callback_(callback),
       only_dirty_(only_dirty),
       source_id_for_copy_request_(base::UnguessableToken::Create()),
-      weak_factory_(this) {
-}
+      weak_factory_(this) {}
+
+FrameSubscriber::~FrameSubscriber() = default;
 
 bool FrameSubscriber::ShouldCaptureFrame(
     const gfx::Rect& dirty_rect,
@@ -46,19 +47,18 @@ bool FrameSubscriber::ShouldCaptureFrame(
   gfx::Size view_size = rect.size();
   gfx::Size bitmap_size = view_size;
   gfx::NativeView native_view = view_->GetNativeView();
-  const float scale =
-      display::Screen::GetScreen()->GetDisplayNearestView(native_view)
-      .device_scale_factor();
+  const float scale = display::Screen::GetScreen()
+                          ->GetDisplayNearestView(native_view)
+                          .device_scale_factor();
   if (scale > 1.0f)
     bitmap_size = gfx::ScaleToCeiledSize(view_size, scale);
 
   rect = gfx::Rect(rect.origin(), bitmap_size);
 
   view_->CopyFromSurface(
-      rect,
-      rect.size(),
-      base::Bind(&FrameSubscriber::OnFrameDelivered,
-                 weak_factory_.GetWeakPtr(), callback_, rect),
+      rect, rect.size(),
+      base::Bind(&FrameSubscriber::OnFrameDelivered, weak_factory_.GetWeakPtr(),
+                 callback_, rect),
       kBGRA_8888_SkColorType);
 
   return false;
@@ -89,8 +89,8 @@ void FrameSubscriber::OnFrameDelivered(const FrameCaptureCallback& callback,
   auto local_buffer = buffer.ToLocalChecked();
 
   {
-    auto source = static_cast<const unsigned char*>(bitmap.getPixels());
-    auto target = node::Buffer::Data(local_buffer);
+    auto* source = static_cast<const unsigned char*>(bitmap.getPixels());
+    auto* target = node::Buffer::Data(local_buffer);
 
     for (int y = 0; y < bitmap.height(); ++y) {
       memcpy(target, source, rgb_row_size);

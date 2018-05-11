@@ -52,11 +52,8 @@ struct ProcessMetric {
 
   ProcessMetric(int type,
                 base::ProcessId pid,
-                std::unique_ptr<base::ProcessMetrics> metrics) {
-    this->type = type;
-    this->pid = pid;
-    this->metrics = std::move(metrics);
-  }
+                std::unique_ptr<base::ProcessMetrics> metrics);
+  ~ProcessMetric();
 };
 
 namespace api {
@@ -67,8 +64,8 @@ class App : public AtomBrowserClient::Delegate,
             public content::GpuDataManagerObserver,
             public content::BrowserChildProcessObserver {
  public:
-  using FileIconCallback = base::Callback<void(v8::Local<v8::Value>,
-                                               const gfx::Image&)>;
+  using FileIconCallback =
+      base::Callback<void(v8::Local<v8::Value>, const gfx::Image&)>;
 
   static mate::Handle<App> Create(v8::Isolate* isolate);
 
@@ -106,16 +103,13 @@ class App : public AtomBrowserClient::Delegate,
   void OnAccessibilitySupportChanged() override;
   void OnPreMainMessageLoopRun() override;
 #if defined(OS_MACOSX)
-  void OnWillContinueUserActivity(
-      bool* prevent_default,
-      const std::string& type) override;
-  void OnDidFailToContinueUserActivity(
-      const std::string& type,
-      const std::string& error) override;
-  void OnContinueUserActivity(
-      bool* prevent_default,
-      const std::string& type,
-      const base::DictionaryValue& user_info) override;
+  void OnWillContinueUserActivity(bool* prevent_default,
+                                  const std::string& type) override;
+  void OnDidFailToContinueUserActivity(const std::string& type,
+                                       const std::string& error) override;
+  void OnContinueUserActivity(bool* prevent_default,
+                              const std::string& type,
+                              const base::DictionaryValue& user_info) override;
   void OnUserActivityWasContinued(
       const std::string& type,
       const base::DictionaryValue& user_info) override;
@@ -166,10 +160,10 @@ class App : public AtomBrowserClient::Delegate,
       const content::ChildProcessData& data) override;
   void BrowserChildProcessHostDisconnected(
       const content::ChildProcessData& data) override;
-  void BrowserChildProcessCrashed(
-      const content::ChildProcessData& data, int exit_code) override;
-  void BrowserChildProcessKilled(
-      const content::ChildProcessData& data, int exit_code) override;
+  void BrowserChildProcessCrashed(const content::ChildProcessData& data,
+                                  int exit_code) override;
+  void BrowserChildProcessKilled(const content::ChildProcessData& data,
+                                 int exit_code) override;
 
  private:
   void SetAppPath(const base::FilePath& app_path);
@@ -184,9 +178,11 @@ class App : public AtomBrowserClient::Delegate,
 
   void SetDesktopName(const std::string& desktop_name);
   std::string GetLocale();
-  bool MakeSingleInstance(
-      const ProcessSingleton::NotificationCallback& callback);
-  void ReleaseSingleInstance();
+  void OnSecondInstance(const base::CommandLine::StringVector& cmd,
+                        const base::FilePath& cwd);
+  bool HasSingleInstanceLock() const;
+  bool RequestSingleInstanceLock();
+  void ReleaseSingleInstanceLock();
   bool Relaunch(mate::Arguments* args);
   void DisableHardwareAcceleration(mate::Arguments* args);
   void DisableDomainBlockingFor3DAPIs(mate::Arguments* args);
@@ -197,8 +193,7 @@ class App : public AtomBrowserClient::Delegate,
   void ImportCertificate(const base::DictionaryValue& options,
                          const net::CompletionCallback& callback);
 #endif
-  void GetFileIcon(const base::FilePath& path,
-                   mate::Arguments* args);
+  void GetFileIcon(const base::FilePath& path, mate::Arguments* args);
 
   std::vector<mate::Dictionary> GetAppMetrics(v8::Isolate* isolate);
   v8::Local<v8::Value> GetGPUFeatureStatus(v8::Isolate* isolate);
@@ -210,7 +205,7 @@ class App : public AtomBrowserClient::Delegate,
 #endif
 #if defined(MAS_BUILD)
   base::Callback<void()> StartAccessingSecurityScopedResource(
-    mate::Arguments* args);
+      mate::Arguments* args);
 #endif
 
 #if defined(OS_WIN)
@@ -233,8 +228,7 @@ class App : public AtomBrowserClient::Delegate,
   base::FilePath app_path_;
 
   using ProcessMetricMap =
-      std::unordered_map<base::ProcessId,
-                         std::unique_ptr<atom::ProcessMetric>>;
+      std::unordered_map<base::ProcessId, std::unique_ptr<atom::ProcessMetric>>;
   ProcessMetricMap app_metrics_;
 
   DISALLOW_COPY_AND_ASSIGN(App);

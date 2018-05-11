@@ -18,7 +18,7 @@ class NativeWindowViews;
 class FramelessView : public views::NonClientFrameView {
  public:
   FramelessView();
-  virtual ~FramelessView();
+  ~FramelessView() override;
 
   virtual void Init(NativeWindowViews* window, views::Widget* frame);
 
@@ -31,8 +31,7 @@ class FramelessView : public views::NonClientFrameView {
   gfx::Rect GetWindowBoundsForClientBounds(
       const gfx::Rect& client_bounds) const override;
   int NonClientHitTest(const gfx::Point& point) override;
-  void GetWindowMask(const gfx::Size& size,
-                     gfx::Path* window_mask) override;
+  void GetWindowMask(const gfx::Size& size, gfx::Path* window_mask) override;
   void ResetWindowControls() override;
   void UpdateWindowIcon() override;
   void UpdateWindowTitle() override;

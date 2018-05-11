@@ -20,6 +20,7 @@ class URLRequestFetchJob : public JsAsker<net::URLRequestJob>,
                            public brightray::URLRequestContextGetter::Delegate {
  public:
   URLRequestFetchJob(net::URLRequest*, net::NetworkDelegate*);
+  ~URLRequestFetchJob() override;
 
   // Called by response writer.
   void HeadersCompleted();
@@ -43,8 +44,10 @@ class URLRequestFetchJob : public JsAsker<net::URLRequestJob>,
   void OnURLFetchComplete(const net::URLFetcher* source) override;
 
  private:
-  int BufferCopy(net::IOBuffer* source, int num_bytes,
-                 net::IOBuffer* target, int target_size);
+  int BufferCopy(net::IOBuffer* source,
+                 int num_bytes,
+                 net::IOBuffer* target,
+                 int target_size);
   void ClearPendingBuffer();
   void ClearWriteBuffer();
 
