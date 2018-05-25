@@ -255,18 +255,7 @@ void ViewDidMoveToSuperview(NSView* self, SEL _cmd) {
 
 NativeWindowMac::NativeWindowMac(const mate::Dictionary& options,
                                  NativeWindow* parent)
-    : NativeWindow(options, parent),
-      root_view_(new RootViewMac(this)),
-      content_view_(nullptr),
-      is_kiosk_(false),
-      was_fullscreen_(false),
-      zoom_to_page_width_(false),
-      fullscreen_window_title_(false),
-      resizable_(true),
-      attention_request_id_(0),
-      title_bar_style_(NORMAL),
-      always_simple_fullscreen_(false),
-      is_simple_fullscreen_(false) {
+    : NativeWindow(options, parent), root_view_(new RootViewMac(this)) {
   int width = 800, height = 600;
   options.Get(options::kWidth, &width);
   options.Get(options::kHeight, &height);
@@ -452,6 +441,9 @@ NativeWindowMac::NativeWindowMac(const mate::Dictionary& options,
   // by calls to other APIs.
   SetMaximizable(maximizable);
 
+  // Default content view.
+  SetContentView(new views::View());
+
   // Make sure the bottom corner is rounded for non-modal windows:
   // http://crbug.com/396264. But do not enable it on OS X 10.9 for transparent
   // window, otherwise a semi-transparent frame would show.
@@ -512,15 +504,13 @@ NativeWindowMac::~NativeWindowMac() {
   [NSEvent removeMonitor:wheel_event_monitor_];
 }
 
-void NativeWindowMac::SetContentView(
-    brightray::InspectableWebContents* web_contents) {
+void NativeWindowMac::SetContentView(views::View* view) {
   views::View* root_view = GetContentsView();
-  if (content_view_)
-    root_view->RemoveChildView(content_view_);
+  if (content_view())
+    root_view->RemoveChildView(content_view());
 
-  content_view_ = new views::NativeViewHost();
-  root_view->AddChildView(content_view_);
-  content_view_->Attach(web_contents->GetView()->GetNativeView());
+  set_content_view(view);
+  root_view->AddChildView(content_view());
 
   if (buttons_view_) {
     // Ensure the buttons view are always floated on the top.

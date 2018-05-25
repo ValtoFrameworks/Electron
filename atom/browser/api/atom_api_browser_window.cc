@@ -9,6 +9,7 @@
 #include "atom/browser/web_contents_preferences.h"
 #include "atom/browser/window_list.h"
 #include "atom/common/api/api_messages.h"
+#include "atom/common/api/constructor.h"
 #include "atom/common/color_util.h"
 #include "atom/common/native_mate_converters/callback.h"
 #include "atom/common/native_mate_converters/value_converter.h"
@@ -77,7 +78,6 @@ BrowserWindow::BrowserWindow(v8::Isolate* isolate,
 
   // Associate with BrowserWindow.
   web_contents->SetOwnerWindow(window());
-  window()->SetContentView(web_contents->managed_web_contents());
 
   auto* host = web_contents->web_contents()->GetRenderViewHost();
   if (host)
@@ -429,17 +429,9 @@ void Initialize(v8::Local<v8::Object> exports,
                 v8::Local<v8::Context> context,
                 void* priv) {
   v8::Isolate* isolate = context->GetIsolate();
-  // Calling SetConstructor would only use TopLevelWindow's prototype.
-  v8::Local<v8::FunctionTemplate> templ = CreateFunctionTemplate(
-      isolate,
-      base::Bind(
-          &mate::internal::InvokeNew<mate::WrappableBase*(mate::Arguments*)>,
-          base::Bind(&BrowserWindow::New)));
-  templ->InstanceTemplate()->SetInternalFieldCount(1);
-  BrowserWindow::BuildPrototype(isolate, templ);
-
   mate::Dictionary dict(isolate, exports);
-  dict.Set("BrowserWindow", templ->GetFunction());
+  dict.Set("BrowserWindow", mate::CreateConstructor<BrowserWindow>(
+                                isolate, base::Bind(&BrowserWindow::New)));
 }
 
 }  // namespace

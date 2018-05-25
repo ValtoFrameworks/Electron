@@ -44,7 +44,7 @@ class NativeWindowViews : public NativeWindow,
   ~NativeWindowViews() override;
 
   // NativeWindow:
-  void SetContentView(brightray::InspectableWebContents* web_contents) override;
+  void SetContentView(views::View* view) override;
   void Close() override;
   void CloseImmediately() override;
   void Focus(bool focus) override;
@@ -135,7 +135,6 @@ class NativeWindowViews : public NativeWindow,
   void SetIcon(const gfx::ImageSkia& icon);
 #endif
 
-  views::View* content_view() const { return content_view_; }
   SkRegion* draggable_region() const { return draggable_region_.get(); }
 
 #if defined(OS_WIN)
@@ -197,8 +196,8 @@ class NativeWindowViews : public NativeWindow,
 
   std::unique_ptr<RootView> root_view_;
 
-  views::View* content_view_;  // Weak ref.
-  views::View* focused_view_;  // The view should be focused by default.
+  // The view should be focused by default.
+  views::View* focused_view_ = nullptr;
 
   // The "resizable" flag on Linux is implemented by setting size constraints,
   // we need to make sure size constraints are restored when window becomes
@@ -243,10 +242,10 @@ class NativeWindowViews : public NativeWindow,
   TaskbarHost taskbar_host_;
 
   // Memoized version of a11y check
-  bool checked_for_a11y_support_;
+  bool checked_for_a11y_support_ = false;
 
   // Whether to show the WS_THICKFRAME style.
-  bool thick_frame_;
+  bool thick_frame_ = true;
 
   // The bounds of window before maximize/fullscreen.
   gfx::Rect restore_bounds_;
@@ -271,14 +270,14 @@ class NativeWindowViews : public NativeWindow,
   std::unique_ptr<SkRegion> draggable_region_;  // used in custom drag.
 
   // How many times the Disable has been called.
-  int disable_count_;
+  int disable_count_ = 0;
 
-  bool use_content_size_;
-  bool movable_;
-  bool resizable_;
-  bool maximizable_;
-  bool minimizable_;
-  bool fullscreenable_;
+  bool use_content_size_ = false;
+  bool movable_ = true;
+  bool resizable_ = true;
+  bool maximizable_ = true;
+  bool minimizable_ = true;
+  bool fullscreenable_ = true;
   std::string title_;
   gfx::Size widget_size_;
   double opacity_ = 1.0;

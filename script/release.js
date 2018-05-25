@@ -6,6 +6,7 @@ const assert = require('assert')
 const fs = require('fs')
 const { execSync } = require('child_process')
 const GitHub = require('github')
+const { GitProcess } = require('dugite')
 const nugget = require('nugget')
 const pkg = require('../package.json')
 const pkgVersion = `v${pkg.version}`
@@ -97,7 +98,7 @@ function assetsForVersion (version, validatingRelease) {
     `electron-${version}-linux-armv7l.zip`,
     `electron-${version}-linux-ia32-symbols.zip`,
     `electron-${version}-linux-ia32.zip`,
-    `electron-${version}-linux-mips64el.zip`,
+//    `electron-${version}-linux-mips64el.zip`,
     `electron-${version}-linux-x64-symbols.zip`,
     `electron-${version}-linux-x64.zip`,
     `electron-${version}-mas-x64-dsym.zip`,
@@ -116,7 +117,7 @@ function assetsForVersion (version, validatingRelease) {
     `ffmpeg-${version}-linux-arm64.zip`,
     `ffmpeg-${version}-linux-armv7l.zip`,
     `ffmpeg-${version}-linux-ia32.zip`,
-    `ffmpeg-${version}-linux-mips64el.zip`,
+//    `ffmpeg-${version}-linux-mips64el.zip`,
     `ffmpeg-${version}-linux-x64.zip`,
     `ffmpeg-${version}-mas-x64.zip`,
     `ffmpeg-${version}-win32-ia32.zip`,
@@ -148,7 +149,11 @@ function s3UrlsForVersion (version) {
 function checkVersion () {
   console.log(`Verifying that app version matches package version ${pkgVersion}.`)
   let startScript = path.join(__dirname, 'start.py')
-  let appVersion = runScript(startScript, ['--version']).trim()
+  let scriptArgs = ['--version']
+  if (args.automaticRelease) {
+    scriptArgs.unshift('-R')
+  }
+  let appVersion = runScript(startScript, scriptArgs).trim()
   check((pkgVersion.indexOf(appVersion) === 0), `App version ${appVersion} matches ` +
     `package version ${pkgVersion}.`, true)
 }
@@ -179,7 +184,11 @@ function uploadNodeShasums () {
 function uploadIndexJson () {
   console.log('Uploading index.json to S3.')
   let scriptPath = path.join(__dirname, 'upload-index-json.py')
-  runScript(scriptPath, [])
+  let scriptArgs = []
+  if (args.automaticRelease) {
+    scriptArgs.push('-R')
+  }
+  runScript(scriptPath, scriptArgs)
   console.log(`${pass} Done uploading index.json to S3.`)
 }
 
@@ -275,6 +284,7 @@ async function makeRelease (releaseToValidate) {
     // Fetch latest version of release before verifying
     draftRelease = await getDraftRelease(pkgVersion, true)
     await validateReleaseAssets(draftRelease)
+    await tagLibCC()
     await publishRelease(draftRelease)
     console.log(`${pass} SUCCESS!!! Release has been published. Please run ` +
       `"npm run publish-to-npm" to publish release to npm.`)
@@ -441,6 +451,25 @@ async function validateChecksums (validationArgs) {
     })
   console.log(`${pass} All files from ${validationArgs.fileSource} match ` +
     `shasums defined in ${validationArgs.shaSumFile}.`)
+}
+
+async function tagLibCC () {
+  const tag = `electron-${pkg.version}`
+  const libccDir = path.join(path.resolve(__dirname, '..'), 'vendor', 'libchromiumcontent')
+  console.log(`Tagging release ${tag}.`)
+  let tagDetails = await GitProcess.exec([ 'tag', '-a', '-m', tag, tag ], libccDir)
+  if (tagDetails.exitCode === 0) {
+    let pushDetails = await GitProcess.exec(['push', '--tags'], libccDir)
+    if (pushDetails.exitCode === 0) {
+      console.log(`${pass} Successfully tagged libchromiumcontent with ${tag}.`)
+    } else {
+      console.log(`${fail} Error pushing libchromiumcontent tag ${tag}: ` +
+        `${pushDetails.stderr}`)
+    }
+  } else {
+    console.log(`${fail} Error tagging libchromiumcontent with ${tag}: ` +
+      `${tagDetails.stderr}`)
+  }
 }
 
 makeRelease(args.validateRelease)

@@ -83,7 +83,7 @@ class NativeWindowClientView : public views::ClientView {
                          views::View* root_view,
                          NativeWindowViews* window)
       : views::ClientView(widget, root_view), window_(window) {}
-  virtual ~NativeWindowClientView() {}
+  ~NativeWindowClientView() override = default;
 
   bool CanClose() override {
     window_->NotifyWindowCloseButtonClicked();
@@ -102,20 +102,7 @@ NativeWindowViews::NativeWindowViews(const mate::Dictionary& options,
                                      NativeWindow* parent)
     : NativeWindow(options, parent),
       root_view_(new RootView(this)),
-      content_view_(nullptr),
-      focused_view_(nullptr),
-#if defined(OS_WIN)
-      checked_for_a11y_support_(false),
-      thick_frame_(true),
-#endif
-      keyboard_event_handler_(new views::UnhandledKeyboardEventHandler),
-      disable_count_(0),
-      use_content_size_(false),
-      movable_(true),
-      resizable_(true),
-      maximizable_(true),
-      minimizable_(true),
-      fullscreenable_(true) {
+      keyboard_event_handler_(new views::UnhandledKeyboardEventHandler) {
   options.Get(options::kTitle, &title_);
 
   bool menu_bar_autohide;
@@ -277,6 +264,9 @@ NativeWindowViews::NativeWindowViews(const mate::Dictionary& options,
 #endif
   }
 
+  // Default content view.
+  SetContentView(new views::View());
+
   gfx::Size size = bounds.size();
   if (has_frame() &&
       options.Get(options::kUseContentSize, &use_content_size_) &&
@@ -304,19 +294,18 @@ NativeWindowViews::~NativeWindowViews() {
 #endif
 }
 
-void NativeWindowViews::SetContentView(
-    brightray::InspectableWebContents* web_contents) {
-  if (content_view_) {
-    root_view_->RemoveChildView(content_view_);
+void NativeWindowViews::SetContentView(views::View* view) {
+  if (content_view()) {
+    root_view_->RemoveChildView(content_view());
     if (browser_view()) {
-      content_view_->RemoveChildView(
+      content_view()->RemoveChildView(
           browser_view()->GetInspectableWebContentsView()->GetView());
       set_browser_view(nullptr);
     }
   }
-  content_view_ = web_contents->GetView()->GetView();
-  focused_view_ = web_contents->GetView()->GetWebView();
-  root_view_->AddChildView(content_view_);
+  set_content_view(view);
+  focused_view_ = view;
+  root_view_->AddChildView(content_view());
   root_view_->Layout();
 }
 
@@ -560,7 +549,7 @@ gfx::Rect NativeWindowViews::GetBounds() {
 }
 
 gfx::Rect NativeWindowViews::GetContentBounds() {
-  return content_view_ ? content_view_->GetBoundsInScreen() : gfx::Rect();
+  return content_view() ? content_view()->GetBoundsInScreen() : gfx::Rect();
 }
 
 gfx::Size NativeWindowViews::GetContentSize() {
@@ -569,7 +558,7 @@ gfx::Size NativeWindowViews::GetContentSize() {
     return NativeWindow::GetContentSize();
 #endif
 
-  return content_view_ ? content_view_->size() : gfx::Size();
+  return content_view() ? content_view()->size() : gfx::Size();
 }
 
 void NativeWindowViews::SetContentSizeConstraints(
@@ -924,11 +913,11 @@ void NativeWindowViews::SetMenu(AtomMenuModel* menu_model) {
 }
 
 void NativeWindowViews::SetBrowserView(NativeBrowserView* view) {
-  if (!content_view_)
+  if (!content_view())
     return;
 
   if (browser_view()) {
-    content_view_->RemoveChildView(
+    content_view()->RemoveChildView(
         browser_view()->GetInspectableWebContentsView()->GetView());
     set_browser_view(nullptr);
   }
@@ -940,7 +929,8 @@ void NativeWindowViews::SetBrowserView(NativeBrowserView* view) {
   // Add as child of the main web view to avoid (0, 0) origin from overlapping
   // with menu bar.
   set_browser_view(view);
-  content_view_->AddChildView(view->GetInspectableWebContentsView()->GetView());
+  content_view()->AddChildView(
+      view->GetInspectableWebContentsView()->GetView());
 }
 
 void NativeWindowViews::SetParentWindow(NativeWindow* parent) {

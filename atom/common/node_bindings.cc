@@ -49,6 +49,8 @@
   V(atom_browser_top_level_window)           \
   V(atom_browser_tray)                       \
   V(atom_browser_web_contents)               \
+  V(atom_browser_web_contents_view)          \
+  V(atom_browser_view)                       \
   V(atom_browser_web_view_manager)           \
   V(atom_browser_window)                     \
   V(atom_common_asar)                        \
@@ -63,6 +65,10 @@
   V(atom_renderer_ipc)                       \
   V(atom_renderer_web_frame)
 
+#define ELECTRON_VIEW_MODULES(V) \
+  V(atom_browser_box_layout)     \
+  V(atom_browser_layout_manager)
+
 // This is used to load built-in modules. Instead of using
 // __attribute__((constructor)), we call the _register_<modname>
 // function for each built-in modules explicitly. This is only
@@ -70,6 +76,9 @@
 // implementation when calling the NODE_BUILTIN_MODULE_CONTEXT_AWARE.
 #define V(modname) void _register_##modname();
 ELECTRON_BUILTIN_MODULES(V)
+#if defined(ENABLE_VIEW_API)
+ELECTRON_VIEW_MODULES(V)
+#endif
 #undef V
 
 namespace {
@@ -133,10 +142,7 @@ base::FilePath GetResourcesPath(bool is_browser) {
 }  // namespace
 
 NodeBindings::NodeBindings(BrowserEnvironment browser_env)
-    : browser_env_(browser_env),
-      embed_closed_(false),
-      uv_env_(nullptr),
-      weak_factory_(this) {
+    : browser_env_(browser_env), weak_factory_(this) {
   if (browser_env == WORKER) {
     uv_loop_init(&worker_loop_);
     uv_loop_ = &worker_loop_;
@@ -166,6 +172,9 @@ NodeBindings::~NodeBindings() {
 void NodeBindings::RegisterBuiltinModules() {
 #define V(modname) _register_##modname();
   ELECTRON_BUILTIN_MODULES(V)
+#if defined(ENABLE_VIEW_API)
+  ELECTRON_VIEW_MODULES(V)
+#endif
 #undef V
 }
 

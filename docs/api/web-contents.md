@@ -1419,11 +1419,17 @@ Shows pop-up dictionary that searches the selected word on the page.
 Set the size of the page. This is only supported for `<webview>` guest contents.
 
 * `options` Object
-  * `normal` Object (optional) - Normal size of the page. This can be used in
+  * `enableAutoSize` Boolean (optional) - true to make the webview container automatically
+    resize within the bounds specified by the attributes normal, min and max.
+  * `normal` [Size](structures/size.md) (optional) - Normal size of the page. This can be used in
     combination with the [`disableguestresize`](webview-tag.md#disableguestresize)
     attribute to manually resize the webview guest contents.
-    * `width` Integer
-    * `height` Integer
+  * `min` [Size](structures/size.md) (optional) - Minimum size of the page. This can be used in
+    combination with the [`disableguestresize`](webview-tag.md#disableguestresize)
+    attribute to manually resize the webview guest contents.
+  * `max` [Size](structures/size.md) (optional) - Maximium size of the page. This can be used in
+    combination with the [`disableguestresize`](webview-tag.md#disableguestresize)
+    attribute to manually resize the webview guest contents.
 
 #### `contents.isOffscreen()`
 
@@ -1493,7 +1499,7 @@ process.
 
 Returns `Integer` - The chromium internal `pid` of the associated renderer. Can
 be compared to the `frameProcessId` passed by frame specific navigation events
-(e.g. `did-frame-navigate`) 
+(e.g. `did-frame-navigate`)
 
 ### Instance Properties
 

@@ -11,20 +11,8 @@
 
 namespace atom {
 
-namespace {
-
-const char* kAtomsToCache[] = {
-    "_NET_WM_STATE",
-    NULL,
-};
-
-}  // namespace
-
 WindowStateWatcher::WindowStateWatcher(NativeWindowViews* window)
-    : window_(window),
-      widget_(window->GetAcceleratedWidget()),
-      was_minimized_(false),
-      was_maximized_(false) {
+    : window_(window), widget_(window->GetAcceleratedWidget()) {
   ui::PlatformEventSource::GetInstance()->AddPlatformEventObserver(this);
 }
 

@@ -23,7 +23,7 @@ std::string get_executable_basename() {
   if (!uv_exepath(buf, &buf_size)) {
     rv = strrchr(static_cast<const char*>(buf), '/') + 1;
   }
-  return std::move(rv);
+  return rv;
 }
 
 }  // namespace
@@ -32,7 +32,7 @@ namespace atom {
 
 PowerObserverLinux::PowerObserverLinux()
     : lock_owner_name_(get_executable_basename()), weak_ptr_factory_(this) {
-  auto dbus_thread_manager = bluez::DBusThreadManagerLinux::Get();
+  auto* dbus_thread_manager = bluez::DBusThreadManagerLinux::Get();
   if (dbus_thread_manager) {
     bus_ = dbus_thread_manager->GetSystemBus();
     if (bus_) {
@@ -48,6 +48,8 @@ PowerObserverLinux::PowerObserverLinux()
     LOG(WARNING) << "DBusThreadManagerLinux instance isn't available";
   }
 }
+
+PowerObserverLinux::~PowerObserverLinux() = default;
 
 void PowerObserverLinux::OnLoginServiceAvailable(bool service_available) {
   if (!service_available) {

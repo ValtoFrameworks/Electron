@@ -22,8 +22,10 @@ class MenuBar : public views::View,
                 public views::MenuButtonListener,
                 public views::FocusChangeListener {
  public:
+  static const char kViewClassName[];
+
   explicit MenuBar(views::View* window);
-  virtual ~MenuBar();
+  ~MenuBar() override;
 
   // Replaces current menu with a new one.
   void SetMenu(AtomMenuModel* menu_model);
@@ -70,8 +72,8 @@ class MenuBar : public views::View,
   SkColor disabled_color_;
 #endif
 
-  views::View* window_;
-  AtomMenuModel* menu_model_;
+  views::View* window_ = nullptr;
+  AtomMenuModel* menu_model_ = nullptr;
 
   View* FindAccelChild(base::char16 key);
 

@@ -20,10 +20,6 @@
 
 class SkRegion;
 
-namespace brightray {
-class InspectableWebContents;
-}
-
 namespace content {
 struct NativeWebKeyboardEvent;
 }
@@ -60,8 +56,7 @@ class NativeWindow : public base::SupportsUserData,
 
   void InitFromOptions(const mate::Dictionary& options);
 
-  virtual void SetContentView(
-      brightray::InspectableWebContents* web_contents) = 0;
+  virtual void SetContentView(views::View* view) = 0;
 
   virtual void Close() = 0;
   virtual void CloseImmediately() = 0;
@@ -102,6 +97,8 @@ class NativeWindow : public base::SupportsUserData,
   virtual gfx::Size GetMinimumSize() const;
   virtual void SetMaximumSize(const gfx::Size& size);
   virtual gfx::Size GetMaximumSize() const;
+  virtual gfx::Size GetContentMinimumSize() const;
+  virtual gfx::Size GetContentMaximumSize() const;
   virtual void SetSheetOffset(const double offsetX, const double offsetY);
   virtual double GetSheetOffsetX();
   virtual double GetSheetOffsetY();
@@ -262,6 +259,7 @@ class NativeWindow : public base::SupportsUserData,
   }
 
   views::Widget* widget() const { return widget_.get(); }
+  views::View* content_view() const { return content_view_; }
 
   bool has_frame() const { return has_frame_; }
   void set_has_frame(bool has_frame) { has_frame_ = has_frame; }
@@ -280,6 +278,7 @@ class NativeWindow : public base::SupportsUserData,
   views::Widget* GetWidget() override;
   const views::Widget* GetWidget() const override;
 
+  void set_content_view(views::View* view) { content_view_ = view; }
   void set_browser_view(NativeBrowserView* browser_view) {
     browser_view_ = browser_view;
   }
@@ -287,39 +286,42 @@ class NativeWindow : public base::SupportsUserData,
  private:
   std::unique_ptr<views::Widget> widget_;
 
+  // The content view, weak ref.
+  views::View* content_view_ = nullptr;
+
   // Whether window has standard frame.
-  bool has_frame_;
+  bool has_frame_ = true;
 
   // Whether window is transparent.
-  bool transparent_;
+  bool transparent_ = false;
 
   // Minimum and maximum size, stored as content size.
   extensions::SizeConstraints size_constraints_;
 
   // Whether window can be resized larger than screen.
-  bool enable_larger_than_screen_;
+  bool enable_larger_than_screen_ = false;
 
   // The windows has been closed.
-  bool is_closed_;
+  bool is_closed_ = false;
 
   // Used to display sheets at the appropriate horizontal and vertical offsets
   // on macOS.
-  double sheet_offset_x_;
-  double sheet_offset_y_;
+  double sheet_offset_x_ = 0.0;
+  double sheet_offset_y_ = 0.0;
 
   // Used to maintain the aspect ratio of a view which is inside of the
   // content view.
-  double aspect_ratio_;
+  double aspect_ratio_ = 0.0;
   gfx::Size aspect_ratio_extraSize_;
 
   // The parent window, it is guaranteed to be valid during this window's life.
-  NativeWindow* parent_;
+  NativeWindow* parent_ = nullptr;
 
   // Is this a modal window.
-  bool is_modal_;
+  bool is_modal_ = false;
 
   // The browser view layer.
-  NativeBrowserView* browser_view_;
+  NativeBrowserView* browser_view_ = nullptr;
 
   // Observers of this window.
   base::ObserverList<NativeWindowObserver> observers_;

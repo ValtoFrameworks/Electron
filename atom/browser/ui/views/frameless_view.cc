@@ -17,11 +17,12 @@ namespace {
 const int kResizeInsideBoundsSize = 5;
 const int kResizeAreaCornerSize = 16;
 
-const char kViewClassName[] = "FramelessView";
-
 }  // namespace
 
-FramelessView::FramelessView() : window_(NULL), frame_(NULL) {}
+// static
+const char FramelessView::kViewClassName[] = "FramelessView";
+
+FramelessView::FramelessView() {}
 
 FramelessView::~FramelessView() {}
 
@@ -100,11 +101,11 @@ gfx::Size FramelessView::CalculatePreferredSize() const {
 }
 
 gfx::Size FramelessView::GetMinimumSize() const {
-  return window_->GetContentSizeConstraints().GetMinimumSize();
+  return window_->GetContentMinimumSize();
 }
 
 gfx::Size FramelessView::GetMaximumSize() const {
-  return window_->GetContentSizeConstraints().GetMaximumSize();
+  return window_->GetContentMaximumSize();
 }
 
 const char* FramelessView::GetClassName() const {

@@ -17,6 +17,7 @@ class NativeWindowViews;
 
 class FramelessView : public views::NonClientFrameView {
  public:
+  static const char kViewClassName[];
   FramelessView();
   ~FramelessView() override;
 
@@ -44,8 +45,8 @@ class FramelessView : public views::NonClientFrameView {
   const char* GetClassName() const override;
 
   // Not owned.
-  NativeWindowViews* window_;
-  views::Widget* frame_;
+  NativeWindowViews* window_ = nullptr;
+  views::Widget* frame_ = nullptr;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(FramelessView);

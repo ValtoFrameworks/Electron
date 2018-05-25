@@ -21,10 +21,6 @@
 @class CustomWindowButtonView;
 @class FullSizeContentView;
 
-namespace views {
-class NativeViewHost;
-}
-
 namespace atom {
 
 class RootViewMac;
@@ -35,7 +31,7 @@ class NativeWindowMac : public NativeWindow {
   ~NativeWindowMac() override;
 
   // NativeWindow:
-  void SetContentView(brightray::InspectableWebContents* web_contents) override;
+  void SetContentView(views::View* view) override;
   void Close() override;
   void CloseImmediately() override;
   void Focus(bool focus) override;
@@ -144,7 +140,6 @@ class NativeWindowMac : public NativeWindow {
   };
   TitleBarStyle title_bar_style() const { return title_bar_style_; }
 
-  views::View* content_view() { return content_view_; }
   AtomPreviewItem* preview_item() const { return preview_item_.get(); }
   AtomTouchBar* touch_bar() const { return touch_bar_.get(); }
   bool zoom_to_page_width() const { return zoom_to_page_width_; }
@@ -178,33 +173,30 @@ class NativeWindowMac : public NativeWindow {
   // The view that fills the client area.
   std::unique_ptr<RootViewMac> root_view_;
 
-  // The content view, managed by widget_.
-  views::NativeViewHost* content_view_;
+  bool is_kiosk_ = false;
+  bool was_fullscreen_ = false;
+  bool zoom_to_page_width_ = false;
+  bool fullscreen_window_title_ = false;
+  bool resizable_ = true;
 
-  bool is_kiosk_;
-  bool was_fullscreen_;
-  bool zoom_to_page_width_;
-  bool fullscreen_window_title_;
-  bool resizable_;
-
-  NSInteger attention_request_id_;  // identifier from requestUserAttention
+  NSInteger attention_request_id_ = 0;  // identifier from requestUserAttention
 
   // The presentation options before entering kiosk mode.
   NSApplicationPresentationOptions kiosk_options_;
 
   // The "titleBarStyle" option.
-  TitleBarStyle title_bar_style_;
+  TitleBarStyle title_bar_style_ = NORMAL;
 
   // Simple (pre-Lion) Fullscreen Settings
-  bool always_simple_fullscreen_;
-  bool is_simple_fullscreen_;
-  bool was_maximizable_;
-  bool was_movable_;
+  bool always_simple_fullscreen_ = false;
+  bool is_simple_fullscreen_ = false;
+  bool was_maximizable_ = false;
+  bool was_movable_ = false;
   NSRect original_frame_;
   NSUInteger simple_fullscreen_mask_;
 
   base::scoped_nsobject<NSColor> background_color_before_vibrancy_;
-  bool transparency_before_vibrancy_;
+  bool transparency_before_vibrancy_ = false;
 
   // The presentation options before entering simple fullscreen mode.
   NSApplicationPresentationOptions simple_fullscreen_options_;

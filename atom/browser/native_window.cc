@@ -4,6 +4,7 @@
 
 #include "atom/browser/native_window.h"
 
+#include <algorithm>
 #include <string>
 #include <utility>
 #include <vector>
@@ -15,24 +16,38 @@
 #include "native_mate/dictionary.h"
 #include "ui/views/widget/widget.h"
 
+#if defined(OS_WIN)
+#include "ui/base/win/shell.h"
+#include "ui/display/win/screen_win.h"
+#endif
+
 DEFINE_WEB_CONTENTS_USER_DATA_KEY(atom::NativeWindowRelay);
 
 namespace atom {
 
+namespace {
+
+#if defined(OS_WIN)
+gfx::Size GetExpandedWindowSize(const NativeWindow* window, gfx::Size size) {
+  if (!window->transparent() || !ui::win::IsAeroGlassEnabled())
+    return size;
+
+  gfx::Size min_size = display::win::ScreenWin::ScreenToDIPSize(
+      window->GetAcceleratedWidget(), gfx::Size(64, 64));
+
+  // Some AMD drivers can't display windows that are less than 64x64 pixels,
+  // so expand them to be at least that size. http://crbug.com/286609
+  gfx::Size expanded(std::max(size.width(), min_size.width()),
+                     std::max(size.height(), min_size.height()));
+  return expanded;
+}
+#endif
+
+}  // namespace
+
 NativeWindow::NativeWindow(const mate::Dictionary& options,
                            NativeWindow* parent)
-    : widget_(new views::Widget),
-      has_frame_(true),
-      transparent_(false),
-      enable_larger_than_screen_(false),
-      is_closed_(false),
-      sheet_offset_x_(0.0),
-      sheet_offset_y_(0.0),
-      aspect_ratio_(0.0),
-      parent_(parent),
-      is_modal_(false),
-      browser_view_(nullptr),
-      weak_factory_(this) {
+    : widget_(new views::Widget), parent_(parent), weak_factory_(this) {
   options.Get(options::kFrame, &has_frame_);
   options.Get(options::kTransparent, &transparent_);
   options.Get(options::kEnableLargerThanScreen, &enable_larger_than_screen_);
@@ -252,6 +267,21 @@ void NativeWindow::SetMaximumSize(const gfx::Size& size) {
 
 gfx::Size NativeWindow::GetMaximumSize() const {
   return GetSizeConstraints().GetMaximumSize();
+}
+
+gfx::Size NativeWindow::GetContentMinimumSize() const {
+  return GetContentSizeConstraints().GetMinimumSize();
+}
+
+gfx::Size NativeWindow::GetContentMaximumSize() const {
+  gfx::Size maximum_size = GetContentSizeConstraints().GetMaximumSize();
+#if defined(OS_WIN)
+  return GetContentSizeConstraints().HasMaximumSize()
+             ? GetExpandedWindowSize(this, maximum_size)
+             : maximum_size;
+#else
+  return maximum_size;
+#endif
 }
 
 void NativeWindow::SetSheetOffset(const double offsetX, const double offsetY) {
@@ -520,7 +550,7 @@ const views::Widget* NativeWindow::GetWidget() const {
 }
 
 NativeWindowRelay::NativeWindowRelay(base::WeakPtr<NativeWindow> window)
-  : key(UserDataKey()), window(window) {}
+    : key(UserDataKey()), window(window) {}
 
 NativeWindowRelay::~NativeWindowRelay() = default;
 

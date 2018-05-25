@@ -38,7 +38,9 @@
       'lib/browser/api/top-level-window.js',
       'lib/browser/api/touch-bar.js',
       'lib/browser/api/tray.js',
+      'lib/browser/api/view.js',
       'lib/browser/api/web-contents.js',
+      'lib/browser/api/web-contents-view.js',
       'lib/browser/chrome-extension.js',
       'lib/browser/desktop-capturer.js',
       'lib/browser/guest-view-manager.js',
@@ -57,6 +59,7 @@
       'lib/common/api/native-image.js',
       'lib/common/api/shell.js',
       'lib/common/atom-binding-setup.js',
+      'lib/common/buffer-utils.js',
       'lib/common/init.js',
       'lib/common/parse-features-string.js',
       'lib/common/reset-search-paths.js',
@@ -162,9 +165,13 @@
       'atom/browser/api/atom_api_tray.h',
       'atom/browser/api/atom_api_url_request.cc',
       'atom/browser/api/atom_api_url_request.h',
+      'atom/browser/api/atom_api_view.cc',
+      'atom/browser/api/atom_api_view.h',
       'atom/browser/api/atom_api_web_contents.cc',
       'atom/browser/api/atom_api_web_contents.h',
       'atom/browser/api/atom_api_web_contents_mac.mm',
+      'atom/browser/api/atom_api_web_contents_view.cc',
+      'atom/browser/api/atom_api_web_contents_view.h',
       'atom/browser/api/atom_api_web_request.cc',
       'atom/browser/api/atom_api_web_request.h',
       'atom/browser/api/atom_api_web_view_manager.cc',
@@ -329,6 +336,8 @@
       'atom/browser/ui/cocoa/atom_preview_item.mm',
       'atom/browser/ui/cocoa/atom_touch_bar.h',
       'atom/browser/ui/cocoa/atom_touch_bar.mm',
+      'atom/browser/ui/cocoa/delayed_native_view_host.cc',
+      'atom/browser/ui/cocoa/delayed_native_view_host.h',
       'atom/browser/ui/cocoa/views_delegate_mac.h',
       'atom/browser/ui/cocoa/views_delegate_mac.mm',
       'atom/browser/ui/cocoa/root_view_mac.mm',
@@ -428,6 +437,7 @@
       'atom/common/api/atom_api_v8_util.cc',
       'atom/common/api/atom_bindings.cc',
       'atom/common/api/atom_bindings.h',
+      'atom/common/api/constructor.h',
       'atom/common/api/event_emitter_caller.cc',
       'atom/common/api/event_emitter_caller.h',
       'atom/common/api/features.cc',
@@ -766,6 +776,18 @@
           'atom/app/node_main.h',
         ],
       }],  # enable_run_as_node
+      ['enable_view_api==1', {
+        'js_sources': [
+          'lib/browser/api/box-layout.js',
+          'lib/browser/api/layout-manager.js',
+        ],
+        'lib_sources': [
+          'atom/browser/api/atom_api_box_layout.cc',
+          'atom/browser/api/atom_api_box_layout.h',
+          'atom/browser/api/atom_api_layout_manager.cc',
+          'atom/browser/api/atom_api_layout_manager.h',
+        ],
+      }],  # enable_view_api
       ['mas_build==1', {
         'lib_sources': [
           'atom/browser/api/atom_api_app_mas.mm',

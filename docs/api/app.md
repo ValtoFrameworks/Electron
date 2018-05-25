@@ -64,6 +64,9 @@ terminating the application.
 then `before-quit` is emitted *after* emitting `close` event on all windows and
 closing them.
 
+**Note:** On Windows, this event will not be emitted if the app is closed due
+to a shutdown/restart of the system or a user logout.
+
 ### Event: 'will-quit'
 
 Returns:
@@ -77,6 +80,9 @@ terminating the application.
 See the description of the `window-all-closed` event for the differences between
 the `will-quit` and `window-all-closed` events.
 
+**Note:** On Windows, this event will not be emitted if the app is closed due
+to a shutdown/restart of the system or a user logout.
+
 ### Event: 'quit'
 
 Returns:
@@ -85,6 +91,9 @@ Returns:
 * `exitCode` Integer
 
 Emitted when the application is quitting.
+
+**Note:** On Windows, this event will not be emitted if the app is closed due
+to a shutdown/restart of the system or a user logout.
 
 ### Event: 'open-file' _macOS_
 
@@ -561,8 +570,9 @@ Overrides the current application's name.
 
 ### `app.getLocale()`
 
-Returns `String` - The current application locale. Possible return values are documented
-[here](locales.md).
+Returns `String` - The current application locale. Possible return values are documented [here](locales.md).
+
+To set the locale, you'll want to use a command line switch at app startup, which may be found [here](https://github.com/electron/electron/blob/master/docs/api/chrome-command-line-switches.md).
 
 **Note:** When distributing your packaged app, you have to also ship the
 `locales` folder.
@@ -758,66 +768,6 @@ app.setJumpList([
 ])
 ```
 
-### `app.makeSingleInstance(callback)` *(Deprecated)*
-
-* `callback` Function
-  * `argv` String[] - An array of the second instance's command line arguments
-  * `workingDirectory` String - The second instance's working directory
-
-Returns `Boolean`.
-
-**Deprecated**: This method has been deprecated and is scheduled for removal.
-Please use `app.requestSingleInstanceLock()` instead.
-
-This method makes your application a Single Instance Application - instead of
-allowing multiple instances of your app to run, this will ensure that only a
-single instance of your app is running, and other instances signal this
-instance and exit.
-
-`callback` will be called by the first instance with `callback(argv, workingDirectory)`
-when a second instance has been executed. `argv` is an Array of the second instance's
-command line arguments, and `workingDirectory` is its current working directory. Usually
-applications respond to this by making their primary window focused and
-non-minimized.
-
-The `callback` is guaranteed to be executed after the `ready` event of `app`
-gets emitted.
-
-This method returns `false` if your process is the primary instance of the
-application and your app should continue loading. And returns `true` if your
-process has sent its parameters to another instance, and you should immediately
-quit.
-
-On macOS the system enforces single instance automatically when users try to open
-a second instance of your app in Finder, and the `open-file` and `open-url`
-events will be emitted for that. However when users start your app in command
-line the system's single instance mechanism will be bypassed and you have to
-use this method to ensure single instance.
-
-An example of activating the window of primary instance when a second instance
-starts:
-
-```javascript
-const {app} = require('electron')
-let myWindow = null
-
-const isSecondInstance = app.makeSingleInstance((commandLine, workingDirectory) => {
-  // Someone tried to run a second instance, we should focus our window.
-  if (myWindow) {
-    if (myWindow.isMinimized()) myWindow.restore()
-    myWindow.focus()
-  }
-})
-
-if (isSecondInstance) {
-  app.quit()
-}
-
-// Create myWindow, load the rest of the app, etc...
-app.on('ready', () => {
-})
-```
-
 ### `app.requestSingleInstanceLock()`
 
 Returns `Boolean`
@@ -877,15 +827,6 @@ This method returns whether or not this instance of your app is currently
 holding the single instance lock.  You can request the lock with
 `app.requestSingleInstanceLock()` and release with
 `app.releaseSingleInstanceLock()`
-
-### `app.releaseSingleInstance()` *(Deprecated)*
-
-Releases all locks that were created by `makeSingleInstance`. This will allow
-multiple instances of the application to once again run side by side.
-
-**Deprecated**: This method has been deprecated and is scheduled for removal.
-Please use the `app.requestSingleInstanceLock()` and `app.releaseSingleInstanceLock()`
-methods instead.
 
 ### `app.releaseSingleInstanceLock()`
 
@@ -1206,7 +1147,7 @@ Sets the `image` associated with this dock icon.
 
 A `Boolean` property that returns  `true` if the app is packaged, `false` otherwise. For many apps, this property can be used to distinguish development and production environments.
 
-[dock-menu]:https://developer.apple.com/library/mac/documentation/Carbon/Conceptual/customizing_docktile/concepts/dockconcepts.html#//apple_ref/doc/uid/TP30000986-CH2-TPXREF103
+[dock-menu]:https://developer.apple.com/macos/human-interface-guidelines/menus/dock-menus/
 [tasks]:https://msdn.microsoft.com/en-us/library/windows/desktop/dd378460(v=vs.85).aspx#tasks
 [app-user-model-id]: https://msdn.microsoft.com/en-us/library/windows/desktop/dd378459(v=vs.85).aspx
 [CFBundleURLTypes]: https://developer.apple.com/library/ios/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html#//apple_ref/doc/uid/TP40009249-102207-TPXREF115

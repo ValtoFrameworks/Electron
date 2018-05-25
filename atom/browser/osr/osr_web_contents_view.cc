@@ -15,11 +15,7 @@ namespace atom {
 OffScreenWebContentsView::OffScreenWebContentsView(
     bool transparent,
     const OnPaintCallback& callback)
-    : transparent_(transparent),
-      painting_(true),
-      frame_rate_(60),
-      callback_(callback),
-      web_contents_(nullptr) {
+    : transparent_(transparent), callback_(callback) {
 #if defined(OS_MACOSX)
   PlatformCreate();
 #endif
@@ -43,7 +39,7 @@ gfx::NativeView OffScreenWebContentsView::GetNativeView() const {
   if (!web_contents_)
     return gfx::NativeView();
 
-  auto relay = NativeWindowRelay::FromWebContents(web_contents_);
+  auto* relay = NativeWindowRelay::FromWebContents(web_contents_);
   if (!relay)
     return gfx::NativeView();
   return relay->window->GetNativeView();
@@ -53,7 +49,7 @@ gfx::NativeView OffScreenWebContentsView::GetContentNativeView() const {
   if (!web_contents_)
     return gfx::NativeView();
 
-  auto relay = NativeWindowRelay::FromWebContents(web_contents_);
+  auto* relay = NativeWindowRelay::FromWebContents(web_contents_);
   if (!relay)
     return gfx::NativeView();
   return relay->window->GetNativeView();
@@ -63,7 +59,7 @@ gfx::NativeWindow OffScreenWebContentsView::GetTopLevelNativeWindow() const {
   if (!web_contents_)
     return gfx::NativeWindow();
 
-  auto relay = NativeWindowRelay::FromWebContents(web_contents_);
+  auto* relay = NativeWindowRelay::FromWebContents(web_contents_);
   if (!relay)
     return gfx::NativeWindow();
   return relay->window->GetNativeWindow();
