@@ -13,6 +13,7 @@
 #include "atom/renderer/api/atom_api_spell_check_client.h"
 #include "base/memory/memory_pressure_listener.h"
 #include "content/public/renderer/render_frame.h"
+#include "content/public/renderer/render_frame_observer.h"
 #include "content/public/renderer/render_frame_visitor.h"
 #include "content/public/renderer/render_view.h"
 #include "native_mate/dictionary.h"
@@ -61,6 +62,29 @@ namespace atom {
 namespace api {
 
 namespace {
+
+content::RenderFrame* GetRenderFrame(v8::Local<v8::Value> value) {
+  v8::Local<v8::Context> context =
+      v8::Local<v8::Object>::Cast(value)->CreationContext();
+  if (context.IsEmpty())
+    return nullptr;
+  blink::WebLocalFrame* frame = blink::WebLocalFrame::FrameForContext(context);
+  if (!frame)
+    return nullptr;
+  return content::RenderFrame::FromWebFrame(frame);
+}
+
+class RenderFrameStatus : public content::RenderFrameObserver {
+ public:
+  explicit RenderFrameStatus(content::RenderFrame* render_frame)
+      : content::RenderFrameObserver(render_frame) {}
+  ~RenderFrameStatus() final {}
+
+  bool is_ok() { return render_frame() != nullptr; }
+
+  // RenderFrameObserver implementation.
+  void OnDestruct() final {}
+};
 
 class ScriptExecutionCallback : public blink::WebScriptExecutionCallback {
  public:
@@ -170,20 +194,23 @@ v8::Local<v8::Value> WebFrame::RegisterEmbedderCustomElement(
       blink::WebString::FromUTF16(name), options);
 }
 
-void WebFrame::RegisterElementResizeCallback(
-    int element_instance_id,
-    const GuestViewContainer::ResizeCallback& callback) {
-  auto* guest_view_container = GuestViewContainer::FromID(element_instance_id);
-  if (guest_view_container)
-    guest_view_container->RegisterElementResizeCallback(callback);
-}
+int WebFrame::GetWebFrameId(v8::Local<v8::Value> content_window) {
+  // Get the WebLocalFrame before (possibly) executing any user-space JS while
+  // getting the |params|. We track the status of the RenderFrame via an
+  // observer in case it is deleted during user code execution.
+  content::RenderFrame* render_frame = GetRenderFrame(content_window);
+  RenderFrameStatus render_frame_status(render_frame);
 
-void WebFrame::AttachGuest(int id) {
-  content::RenderFrame::FromWebFrame(web_frame_)->AttachGuest(id);
-}
+  if (!render_frame_status.is_ok())
+    return -1;
 
-void WebFrame::DetachGuest(int id) {
-  content::RenderFrame::FromWebFrame(web_frame_)->DetachGuest(id);
+  blink::WebLocalFrame* frame = render_frame->GetWebFrame();
+  // Parent must exist.
+  blink::WebFrame* parent_frame = frame->Parent();
+  DCHECK(parent_frame);
+  DCHECK(parent_frame->IsWebLocalFrame());
+
+  return render_frame->GetRoutingID();
 }
 
 void WebFrame::SetSpellCheckProvider(mate::Arguments* args,
@@ -195,8 +222,8 @@ void WebFrame::SetSpellCheckProvider(mate::Arguments* args,
     return;
   }
 
-  std::unique_ptr<SpellCheckClient> client(new SpellCheckClient(
-      language, auto_spell_correct_turned_on, args->isolate(), provider));
+  auto client = std::make_unique<SpellCheckClient>(
+      language, auto_spell_correct_turned_on, args->isolate(), provider);
   // Set spellchecker for all live frames in the same process or
   // in the sandbox mode for all live sub frames to this WebFrame.
   FrameSpellChecker spell_checker(
@@ -204,12 +231,6 @@ void WebFrame::SetSpellCheckProvider(mate::Arguments* args,
   content::RenderFrame::ForEach(&spell_checker);
   spell_check_client_.swap(client);
   web_frame_->SetSpellCheckPanelHostClient(spell_check_client_.get());
-}
-
-void WebFrame::RegisterURLSchemeAsSecure(const std::string& scheme) {
-  // TODO(pfrazee): Remove 2.0
-  blink::SchemeRegistry::RegisterURLSchemeAsSecure(
-      WTF::String::FromUTF8(scheme.data(), scheme.length()));
 }
 
 void WebFrame::RegisterURLSchemeAsBypassingCSP(const std::string& scheme) {
@@ -243,10 +264,6 @@ void WebFrame::RegisterURLSchemeAsPrivileged(const std::string& scheme,
   // Register scheme to privileged list (https, wss, data, chrome-extension)
   WTF::String privileged_scheme(
       WTF::String::FromUTF8(scheme.data(), scheme.length()));
-  if (secure) {
-    // TODO(pfrazee): Remove 2.0
-    blink::SchemeRegistry::RegisterURLSchemeAsSecure(privileged_scheme);
-  }
   if (bypassCSP) {
     blink::SchemeRegistry::RegisterURLSchemeAsBypassingContentSecurityPolicy(
         privileged_scheme);
@@ -442,13 +459,13 @@ v8::Local<v8::Value> WebFrame::FindFrameByName(const std::string& name) const {
 
 v8::Local<v8::Value> WebFrame::FindFrameByRoutingId(int routing_id) const {
   content::RenderFrame* render_frame =
-    content::RenderFrame::FromRoutingID(routing_id);
+      content::RenderFrame::FromRoutingID(routing_id);
   blink::WebLocalFrame* local_frame = nullptr;
   if (render_frame)
     local_frame = render_frame->GetWebFrame();
   if (local_frame)
-    return mate::CreateHandle(isolate(),
-                              new WebFrame(isolate(), local_frame)).ToV8();
+    return mate::CreateHandle(isolate(), new WebFrame(isolate(), local_frame))
+        .ToV8();
   else
     return v8::Null(isolate());
 }
@@ -474,13 +491,8 @@ void WebFrame::BuildPrototype(v8::Isolate* isolate,
                  &WebFrame::SetLayoutZoomLevelLimits)
       .SetMethod("registerEmbedderCustomElement",
                  &WebFrame::RegisterEmbedderCustomElement)
-      .SetMethod("registerElementResizeCallback",
-                 &WebFrame::RegisterElementResizeCallback)
-      .SetMethod("attachGuest", &WebFrame::AttachGuest)
-      .SetMethod("detachGuest", &WebFrame::DetachGuest)
+      .SetMethod("getWebFrameId", &WebFrame::GetWebFrameId)
       .SetMethod("setSpellCheckProvider", &WebFrame::SetSpellCheckProvider)
-      .SetMethod("registerURLSchemeAsSecure",
-                 &WebFrame::RegisterURLSchemeAsSecure)
       .SetMethod("registerURLSchemeAsBypassingCSP",
                  &WebFrame::RegisterURLSchemeAsBypassingCSP)
       .SetMethod("registerURLSchemeAsPrivileged",

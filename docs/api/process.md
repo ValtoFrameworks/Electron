@@ -8,6 +8,28 @@ Electron's `process` object is extended from the
 [Node.js `process` object](https://nodejs.org/api/process.html).
 It adds the following events, properties, and methods:
 
+## Sandbox
+
+In sandboxed renderers the `process` object contains only a subset of the APIs:
+- `crash()`
+- `hang()`
+- `getHeapStatistics()`
+- `getProcessMemoryInfo()`
+- `getSystemMemoryInfo()`
+- `getCPUUsage()`
+- `getIOCounters()`
+- `argv`
+- `execPath`
+- `env`
+- `pid`
+- `arch`
+- `platform`
+- `resourcesPath`
+- `sandboxed`
+- `type`
+- `version`
+- `versions`
+
 ## Events
 
 ### Event: 'loaded'
@@ -55,6 +77,11 @@ instead of the `--no-deprecation` command line flag.
 
 A `String` representing the path to the resources directory.
 
+### `process.sandboxed`
+
+A `Boolean`. When the renderer process is sandboxed, this property is `true`,
+otherwise it is `undefined`.
+
 ### `process.throwDeprecation`
 
 A `Boolean` that controls whether or not deprecation warnings will be thrown as
@@ -98,6 +125,13 @@ The `process` object has the following methods:
 
 Causes the main thread of the current process crash.
 
+### `process.getCreationTime()`
+
+Returns `Number | null` - The number of milliseconds since epoch, or `null` if the information is unavailable
+
+Indicates the creation time of the application.
+The time is represented as number of milliseconds since epoch. It returns null if it is unable to get the process creation time.
+
 ### `process.getCPUUsage()`
 
 Returns [`CPUUsage`](structures/cpu-usage.md)
@@ -105,6 +139,22 @@ Returns [`CPUUsage`](structures/cpu-usage.md)
 ### `process.getIOCounters()` _Windows_ _Linux_
 
 Returns [`IOCounters`](structures/io-counters.md)
+
+### `process.getHeapStatistics()`
+
+Returns `Object`:
+
+* `totalHeapSize` Integer
+* `totalHeapSizeExecutable` Integer
+* `totalPhysicalSize` Integer
+* `totalAvailableSize` Integer
+* `usedHeapSize` Integer
+* `heapSizeLimit` Integer
+* `mallocedMemory` Integer
+* `peakMallocedMemory` Integer
+* `doesZapGarbage` Boolean
+
+Returns an object with V8 heap statistics. Note that all statistics are reported in Kilobytes.
 
 ### `process.getProcessMemoryInfo()`
 

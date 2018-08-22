@@ -128,6 +128,8 @@ int ShowTaskDialogUTF16(NativeWindow* parent,
       case MESSAGE_BOX_TYPE_ERROR:
         config.pszMainIcon = TD_ERROR_ICON;
         break;
+      case MESSAGE_BOX_TYPE_NONE:
+        break;
     }
   }
 
@@ -257,8 +259,8 @@ void ShowMessageBox(NativeWindow* parent,
                     bool checkbox_checked,
                     const gfx::ImageSkia& icon,
                     const MessageBoxCallback& callback) {
-  std::unique_ptr<base::Thread> thread(
-      new base::Thread(ATOM_PRODUCT_NAME "MessageBoxThread"));
+  auto thread =
+      std::make_unique<base::Thread>(ATOM_PRODUCT_NAME "MessageBoxThread");
   thread->init_com_with_mta(false);
   if (!thread->Start()) {
     callback.Run(cancel_id, checkbox_checked);

@@ -1,18 +1,23 @@
 vars = {
   'chromium_version':
-    '63.0.3239.150',
+    '66.0.3359.181',
   'libchromiumcontent_revision':
-    '0e8b7216fe616405ea14ff5bece3ca087ead613c',
+    '00cce7a094c5ded91d52d2ac2aac2ab70dc66d02',
   'node_version':
-    'v9.7.0-33-g538a5023af',
-  'native_mate_revision':
-    '4cd7d113915de0cc08e9a218be35bff9c7361906',
+    'ece0a06ac8147efb5b5af431c21f312f1884616e',
 
   'chromium_git':
     'https://chromium.googlesource.com',
 
   'electron_git':
     'https://github.com/electron',
+
+  'checkout_nacl':
+    False,
+  'checkout_libaom':
+    True,
+  'checkout_oculus_sdk':
+    False,
 }
 
 deps = {
@@ -22,14 +27,15 @@ deps = {
     (Var("electron_git")) + '/libchromiumcontent.git@' + (Var("libchromiumcontent_revision")),
   'src/third_party/electron_node':
     (Var("electron_git")) + '/node.git@' + (Var("node_version")),
-  'src/third_party/native_mate':
-    (Var("electron_git")) + '/native-mate.git@' + (Var("native_mate_revision")),
 }
 
 hooks = [
   {
     'action': [
-      'src/libchromiumcontent/script/apply-patches'
+      'python',
+      'src/libchromiumcontent/script/apply-patches',
+      '--project-root=.',
+      '--commit'
     ],
     'pattern':
       'src/libchromiumcontent',
@@ -38,6 +44,7 @@ hooks = [
   },
   {
     'action': [
+      'python',
       'src/electron/script/update-external-binaries.py'
     ],
     'pattern':
@@ -47,20 +54,9 @@ hooks = [
   },
   {
     'action': [
-      'bash',
+      'python',
       '-c',
-      # NOTE(nornagon): this ridiculous {{}} stuff is because these strings get
-      # variable-substituted twice by gclient.
-      'echo -e "#\\n{{{{\'variables\':{{{{}}}}}}}}" > src/third_party/electron_node/config.gypi',
-    ],
-    'pattern': 'src/third_party/electron_node',
-    'name': 'touch_node_config_gypi'
-  },
-  {
-    'action': [
-      'bash',
-      '-c',
-      'cd src/electron; npm install',
+      'import os; os.chdir("src"); os.chdir("electron"); os.system("npm install")',
     ],
     'pattern': 'src/electron/package.json',
     'name': 'electron_npm_deps'
@@ -71,3 +67,10 @@ recursedeps = [
   'src',
   'src/libchromiumcontent',
 ]
+
+gclient_gn_args = [
+  'checkout_libaom',
+  'checkout_nacl',
+  'checkout_oculus_sdk'
+]
+gclient_gn_args_file =  'src/build/config/gclient_args.gni'

@@ -70,6 +70,29 @@ describe('chromium feature', () => {
     })
   })
 
+  describe('accessing key names also used as Node.js module names', () => {
+    it('does not crash', (done) => {
+      w = new BrowserWindow({show: false})
+      w.webContents.once('did-finish-load', () => { done() })
+      w.webContents.once('crashed', () => done(new Error('WebContents crashed.')))
+      w.loadURL(`file://${fixtures}/pages/external-string.html`)
+    })
+  })
+
+  describe('loading jquery', () => {
+    it('does not crash', (done) => {
+      w = new BrowserWindow({
+        show: false,
+        webPreferences: {
+          nodeIntegration: false
+        }
+      })
+      w.webContents.once('did-finish-load', () => { done() })
+      w.webContents.once('crashed', () => done(new Error('WebContents crashed.')))
+      w.loadURL(`file://${fixtures}/pages/jquery.html`)
+    })
+  })
+
   describe('navigator.webkitGetUserMedia', () => {
     it('calls its callbacks', (done) => {
       navigator.webkitGetUserMedia({
@@ -296,7 +319,8 @@ describe('chromium feature', () => {
       b = window.open(windowUrl, '', 'nodeIntegration=no,show=no')
     })
 
-    it('disables node integration when it is disabled on the parent window for chrome devtools URLs', (done) => {
+    // TODO(codebytere): re-enable this test
+    xit('disables node integration when it is disabled on the parent window for chrome devtools URLs', (done) => {
       let b
       app.once('web-contents-created', (event, contents) => {
         contents.once('did-finish-load', () => {
@@ -954,8 +978,8 @@ describe('chromium feature', () => {
         const port = server.address().port
         wss = new WebSocketServer({ server: server })
         wss.on('error', done)
-        wss.on('connection', (ws) => {
-          if (ws.upgradeReq.headers['user-agent']) {
+        wss.on('connection', (ws, upgradeReq) => {
+          if (upgradeReq.headers['user-agent']) {
             done()
           } else {
             done('user agent is empty')

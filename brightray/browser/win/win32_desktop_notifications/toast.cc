@@ -1,8 +1,11 @@
+#ifndef NOMINMAX
 #define NOMINMAX
+#endif
 #include "brightray/browser/win/win32_desktop_notifications/toast.h"
 #include <uxtheme.h>
 #include <windowsx.h>
 #include <algorithm>
+#include "base/logging.h"
 #include "brightray/browser/win/win32_desktop_notifications/common.h"
 
 #pragma comment(lib, "msimg32.lib")
@@ -83,7 +86,7 @@ static HBITMAP StretchBitmap(HBITMAP bitmap, unsigned width, unsigned height) {
       if (GetDIBits(hdc_screen, bitmap, 0, 0, 0,
                     reinterpret_cast<BITMAPINFO*>(&bmi), DIB_RGB_COLORS) &&
           bmi.biSizeImage > 0 && (bmi.biSizeImage % 4) == 0) {
-        auto buf = reinterpret_cast<BYTE*>(
+        auto* buf = reinterpret_cast<BYTE*>(
             _aligned_malloc(bmi.biSizeImage, sizeof(DWORD)));
 
         if (buf) {
@@ -117,12 +120,12 @@ static HBITMAP StretchBitmap(HBITMAP bitmap, unsigned width, unsigned height) {
     bmi.biCompression = BI_RGB;
 
     void* color_bits;
-    auto color_bitmap =
+    auto* color_bitmap =
         CreateDIBSection(NULL, reinterpret_cast<BITMAPINFO*>(&bmi),
                          DIB_RGB_COLORS, &color_bits, NULL, 0);
 
     void* alpha_bits;
-    auto alpha_bitmap =
+    auto* alpha_bitmap =
         CreateDIBSection(NULL, reinterpret_cast<BITMAPINFO*>(&bmi),
                          DIB_RGB_COLORS, &alpha_bits, NULL, 0);
 
@@ -148,9 +151,9 @@ static HBITMAP StretchBitmap(HBITMAP bitmap, unsigned width, unsigned height) {
       GdiFlush();
 
       // apply the alpha channel
-      auto dest = reinterpret_cast<BYTE*>(color_bits);
-      auto src = reinterpret_cast<const BYTE*>(alpha_bits);
-      auto end = src + (width * height * 4);
+      auto* dest = reinterpret_cast<BYTE*>(color_bits);
+      auto* src = reinterpret_cast<const BYTE*>(alpha_bits);
+      auto* end = src + (width * height * 4);
       while (src != end) {
         dest[3] = src[0];
         dest += 4;
@@ -180,6 +183,9 @@ static HBITMAP StretchBitmap(HBITMAP bitmap, unsigned width, unsigned height) {
 
   return result_bitmap;
 }
+
+const TCHAR DesktopNotificationController::Toast::class_name_[] =
+    TEXT("DesktopNotificationToast");
 
 DesktopNotificationController::Toast::Toast(HWND hwnd,
                                             shared_ptr<NotificationData>* data)
@@ -214,10 +220,10 @@ LRESULT DesktopNotificationController::Toast::WndProc(HWND hwnd,
                                                       LPARAM lparam) {
   switch (message) {
     case WM_CREATE: {
-      auto& cs = reinterpret_cast<const CREATESTRUCT*&>(lparam);
-      auto data =
+      auto*& cs = reinterpret_cast<const CREATESTRUCT*&>(lparam);
+      auto* data =
           static_cast<shared_ptr<NotificationData>*>(cs->lpCreateParams);
-      auto inst = new Toast(hwnd, data);
+      auto* inst = new Toast(hwnd, data);
       SetWindowLongPtr(hwnd, 0, (LONG_PTR)inst);
     } break;
 
@@ -236,7 +242,7 @@ LRESULT DesktopNotificationController::Toast::WndProc(HWND hwnd,
       return 0;
 
     case WM_LBUTTONDOWN: {
-      auto inst = Get(hwnd);
+      auto* inst = Get(hwnd);
 
       inst->Dismiss();
 
@@ -249,7 +255,7 @@ LRESULT DesktopNotificationController::Toast::WndProc(HWND hwnd,
       return 0;
 
     case WM_MOUSEMOVE: {
-      auto inst = Get(hwnd);
+      auto* inst = Get(hwnd);
       if (!inst->is_highlighted_) {
         inst->is_highlighted_ = true;
 
@@ -269,7 +275,7 @@ LRESULT DesktopNotificationController::Toast::WndProc(HWND hwnd,
       return 0;
 
     case WM_MOUSELEAVE: {
-      auto inst = Get(hwnd);
+      auto* inst = Get(hwnd);
       inst->is_highlighted_ = false;
       inst->is_close_hot_ = false;
       inst->UpdateContents();
@@ -283,7 +289,7 @@ LRESULT DesktopNotificationController::Toast::WndProc(HWND hwnd,
       return 0;
 
     case WM_WINDOWPOSCHANGED: {
-      auto& wp = reinterpret_cast<WINDOWPOS*&>(lparam);
+      auto*& wp = reinterpret_cast<WINDOWPOS*&>(lparam);
       if (wp->flags & SWP_HIDEWINDOW) {
         if (!IsWindowVisible(hwnd))
           Get(hwnd)->is_highlighted_ = false;
@@ -357,7 +363,7 @@ void DesktopNotificationController::Toast::Draw() {
 
   // Draw background
   {
-    auto brush = CreateSolidBrush(back_color);
+    auto* brush = CreateSolidBrush(back_color);
 
     RECT rc = {0, 0, toast_size_.cx, toast_size_.cy};
     FillRect(hdc_, &rc, brush);
@@ -368,8 +374,8 @@ void DesktopNotificationController::Toast::Draw() {
   SetBkMode(hdc_, TRANSPARENT);
 
   const auto close = L'\x2715';
-  auto caption_font = data_->controller->GetCaptionFont();
-  auto body_font = data_->controller->GetBodyFont();
+  auto* caption_font = data_->controller->GetCaptionFont();
+  auto* body_font = data_->controller->GetBodyFont();
 
   TEXTMETRIC tm_cap;
   SelectFont(hdc_, caption_font);
@@ -520,7 +526,7 @@ void DesktopNotificationController::Toast::UpdateBufferSize() {
     if (new_size.cx != this->toast_size_.cx ||
         new_size.cy != this->toast_size_.cy) {
       HDC hdc_screen = GetDC(NULL);
-      auto new_bitmap =
+      auto* new_bitmap =
           CreateCompatibleBitmap(hdc_screen, new_size.cx, new_size.cy);
       ReleaseDC(NULL, hdc_screen);
 
@@ -561,7 +567,7 @@ void DesktopNotificationController::Toast::UpdateBufferSize() {
             auto b1 = UpdateLayeredWindowIndirect(hwnd_, &ulw);
             ulw.prcDirty = &dirty2;
             auto b2 = UpdateLayeredWindowIndirect(hwnd_, &ulw);
-            _ASSERT(b1 && b2);
+            DCHECK(b1 && b2);
           }
 
           return;
@@ -733,21 +739,21 @@ HDWP DesktopNotificationController::Toast::Animate(HDWP hdwp,
   // ULWI fails, which can happen when one of the dimensions is zero (e.g.
   // at the beginning of ease-in).
 
-  auto ulw_result = UpdateLayeredWindowIndirect(hwnd_, &ulw);
+  UpdateLayeredWindowIndirect(hwnd_, &ulw);
   hdwp = DeferWindowPos(hdwp, hwnd_, HWND_TOPMOST, pt.x, pt.y, size.cx, size.cy,
                         dwpFlags);
   return hdwp;
 }
 
 void DesktopNotificationController::Toast::StartEaseIn() {
-  _ASSERT(!ease_in_active_);
+  DCHECK(!ease_in_active_);
   ease_in_start_ = GetTickCount();
   ease_in_active_ = true;
   data_->controller->StartAnimation();
 }
 
 void DesktopNotificationController::Toast::StartEaseOut() {
-  _ASSERT(!ease_out_active_);
+  DCHECK(!ease_out_active_);
   ease_out_start_ = GetTickCount();
   ease_out_active_ = true;
   data_->controller->StartAnimation();

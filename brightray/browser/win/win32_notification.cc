@@ -1,4 +1,6 @@
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
 
 #include "brightray/browser/win/win32_notification.h"
 
@@ -11,7 +13,7 @@
 namespace brightray {
 
 void Win32Notification::Show(const NotificationOptions& options) {
-  auto presenter = static_cast<NotificationPresenterWin7*>(this->presenter());
+  auto* presenter = static_cast<NotificationPresenterWin7*>(this->presenter());
   if (!presenter)
     return;
 

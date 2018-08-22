@@ -2,6 +2,7 @@ const assert = require('assert')
 const ChildProcess = require('child_process')
 const fs = require('fs')
 const path = require('path')
+const util = require('util')
 const {closeWindow} = require('./window-helpers')
 
 const nativeImage = require('electron').nativeImage
@@ -296,129 +297,250 @@ describe('asar package', function () {
       })
     })
 
-    describe('fs.realpathSync', function () {
-      it('returns real path root', function () {
-        var parent = fs.realpathSync(path.join(fixtures, 'asar'))
-        var p = 'a.asar'
-        var r = fs.realpathSync(path.join(parent, p))
+    describe('fs.realpathSync', () => {
+      it('returns real path root', () => {
+        const parent = fs.realpathSync(path.join(fixtures, 'asar'))
+        const p = 'a.asar'
+        const r = fs.realpathSync(path.join(parent, p))
         assert.equal(r, path.join(parent, p))
       })
 
-      it('returns real path of a normal file', function () {
-        var parent = fs.realpathSync(path.join(fixtures, 'asar'))
-        var p = path.join('a.asar', 'file1')
-        var r = fs.realpathSync(path.join(parent, p))
+      it('returns real path of a normal file', () => {
+        const parent = fs.realpathSync(path.join(fixtures, 'asar'))
+        const p = path.join('a.asar', 'file1')
+        const r = fs.realpathSync(path.join(parent, p))
         assert.equal(r, path.join(parent, p))
       })
 
-      it('returns real path of a normal directory', function () {
-        var parent = fs.realpathSync(path.join(fixtures, 'asar'))
-        var p = path.join('a.asar', 'dir1')
-        var r = fs.realpathSync(path.join(parent, p))
+      it('returns real path of a normal directory', () => {
+        const parent = fs.realpathSync(path.join(fixtures, 'asar'))
+        const p = path.join('a.asar', 'dir1')
+        const r = fs.realpathSync(path.join(parent, p))
         assert.equal(r, path.join(parent, p))
       })
 
-      it('returns real path of a linked file', function () {
-        var parent = fs.realpathSync(path.join(fixtures, 'asar'))
-        var p = path.join('a.asar', 'link2', 'link1')
-        var r = fs.realpathSync(path.join(parent, p))
+      it('returns real path of a linked file', () => {
+        const parent = fs.realpathSync(path.join(fixtures, 'asar'))
+        const p = path.join('a.asar', 'link2', 'link1')
+        const r = fs.realpathSync(path.join(parent, p))
         assert.equal(r, path.join(parent, 'a.asar', 'file1'))
       })
 
-      it('returns real path of a linked directory', function () {
-        var parent = fs.realpathSync(path.join(fixtures, 'asar'))
-        var p = path.join('a.asar', 'link2', 'link2')
-        var r = fs.realpathSync(path.join(parent, p))
+      it('returns real path of a linked directory', () => {
+        const parent = fs.realpathSync(path.join(fixtures, 'asar'))
+        const p = path.join('a.asar', 'link2', 'link2')
+        const r = fs.realpathSync(path.join(parent, p))
         assert.equal(r, path.join(parent, 'a.asar', 'dir1'))
       })
 
-      it('returns real path of an unpacked file', function () {
-        var parent = fs.realpathSync(path.join(fixtures, 'asar'))
-        var p = path.join('unpack.asar', 'a.txt')
-        var r = fs.realpathSync(path.join(parent, p))
+      it('returns real path of an unpacked file', () => {
+        const parent = fs.realpathSync(path.join(fixtures, 'asar'))
+        const p = path.join('unpack.asar', 'a.txt')
+        const r = fs.realpathSync(path.join(parent, p))
         assert.equal(r, path.join(parent, p))
       })
 
-      it('throws ENOENT error when can not find file', function () {
-        var parent = fs.realpathSync(path.join(fixtures, 'asar'))
-        var p = path.join('a.asar', 'not-exist')
-        var throws = function () {
-          fs.realpathSync(path.join(parent, p))
-        }
+      it('throws ENOENT error when can not find file', () => {
+        const parent = fs.realpathSync(path.join(fixtures, 'asar'))
+        const p = path.join('a.asar', 'not-exist')
+        const throws = () => fs.realpathSync(path.join(parent, p))
         assert.throws(throws, /ENOENT/)
       })
     })
 
-    describe('fs.realpath', function () {
-      it('returns real path root', function (done) {
-        var parent = fs.realpathSync(path.join(fixtures, 'asar'))
-        var p = 'a.asar'
-        fs.realpath(path.join(parent, p), function (err, r) {
+    describe('fs.realpathSync.native', () => {
+      it('returns real path root', () => {
+        const parent = fs.realpathSync.native(path.join(fixtures, 'asar'))
+        const p = 'a.asar'
+        const r = fs.realpathSync.native(path.join(parent, p))
+        assert.equal(r, path.join(parent, p))
+      })
+
+      it('returns real path of a normal file', () => {
+        const parent = fs.realpathSync.native(path.join(fixtures, 'asar'))
+        const p = path.join('a.asar', 'file1')
+        const r = fs.realpathSync.native(path.join(parent, p))
+        assert.equal(r, path.join(parent, p))
+      })
+
+      it('returns real path of a normal directory', () => {
+        const parent = fs.realpathSync.native(path.join(fixtures, 'asar'))
+        const p = path.join('a.asar', 'dir1')
+        const r = fs.realpathSync.native(path.join(parent, p))
+        assert.equal(r, path.join(parent, p))
+      })
+
+      it('returns real path of a linked file', () => {
+        const parent = fs.realpathSync.native(path.join(fixtures, 'asar'))
+        const p = path.join('a.asar', 'link2', 'link1')
+        const r = fs.realpathSync.native(path.join(parent, p))
+        assert.equal(r, path.join(parent, 'a.asar', 'file1'))
+      })
+
+      it('returns real path of a linked directory', () => {
+        const parent = fs.realpathSync.native(path.join(fixtures, 'asar'))
+        const p = path.join('a.asar', 'link2', 'link2')
+        const r = fs.realpathSync.native(path.join(parent, p))
+        assert.equal(r, path.join(parent, 'a.asar', 'dir1'))
+      })
+
+      it('returns real path of an unpacked file', () => {
+        const parent = fs.realpathSync.native(path.join(fixtures, 'asar'))
+        const p = path.join('unpack.asar', 'a.txt')
+        const r = fs.realpathSync.native(path.join(parent, p))
+        assert.equal(r, path.join(parent, p))
+      })
+
+      it('throws ENOENT error when can not find file', () => {
+        const parent = fs.realpathSync.native(path.join(fixtures, 'asar'))
+        const p = path.join('a.asar', 'not-exist')
+        const throws = () => fs.realpathSync.native(path.join(parent, p))
+        assert.throws(throws, /ENOENT/)
+      })
+    })
+
+    describe('fs.realpath', () => {
+      it('returns real path root', done => {
+        const parent = fs.realpathSync(path.join(fixtures, 'asar'))
+        const p = 'a.asar'
+        fs.realpath(path.join(parent, p), (err, r) => {
           assert.equal(err, null)
           assert.equal(r, path.join(parent, p))
           done()
         })
       })
 
-      it('returns real path of a normal file', function (done) {
-        var parent = fs.realpathSync(path.join(fixtures, 'asar'))
-        var p = path.join('a.asar', 'file1')
-        fs.realpath(path.join(parent, p), function (err, r) {
+      it('returns real path of a normal file', done => {
+        const parent = fs.realpathSync(path.join(fixtures, 'asar'))
+        const p = path.join('a.asar', 'file1')
+        fs.realpath(path.join(parent, p), (err, r) => {
           assert.equal(err, null)
           assert.equal(r, path.join(parent, p))
           done()
         })
       })
 
-      it('returns real path of a normal directory', function (done) {
-        var parent = fs.realpathSync(path.join(fixtures, 'asar'))
-        var p = path.join('a.asar', 'dir1')
-        fs.realpath(path.join(parent, p), function (err, r) {
+      it('returns real path of a normal directory', done => {
+        const parent = fs.realpathSync(path.join(fixtures, 'asar'))
+        const p = path.join('a.asar', 'dir1')
+        fs.realpath(path.join(parent, p), (err, r) => {
           assert.equal(err, null)
           assert.equal(r, path.join(parent, p))
           done()
         })
       })
 
-      it('returns real path of a linked file', function (done) {
-        var parent = fs.realpathSync(path.join(fixtures, 'asar'))
-        var p = path.join('a.asar', 'link2', 'link1')
-        fs.realpath(path.join(parent, p), function (err, r) {
+      it('returns real path of a linked file', done => {
+        const parent = fs.realpathSync(path.join(fixtures, 'asar'))
+        const p = path.join('a.asar', 'link2', 'link1')
+        fs.realpath(path.join(parent, p), (err, r) => {
           assert.equal(err, null)
           assert.equal(r, path.join(parent, 'a.asar', 'file1'))
           done()
         })
       })
 
-      it('returns real path of a linked directory', function (done) {
-        var parent = fs.realpathSync(path.join(fixtures, 'asar'))
-        var p = path.join('a.asar', 'link2', 'link2')
-        fs.realpath(path.join(parent, p), function (err, r) {
+      it('returns real path of a linked directory', done => {
+        const parent = fs.realpathSync(path.join(fixtures, 'asar'))
+        const p = path.join('a.asar', 'link2', 'link2')
+        fs.realpath(path.join(parent, p), (err, r) => {
           assert.equal(err, null)
           assert.equal(r, path.join(parent, 'a.asar', 'dir1'))
           done()
         })
       })
 
-      it('returns real path of an unpacked file', function (done) {
-        var parent = fs.realpathSync(path.join(fixtures, 'asar'))
-        var p = path.join('unpack.asar', 'a.txt')
-        fs.realpath(path.join(parent, p), function (err, r) {
+      it('returns real path of an unpacked file', done => {
+        const parent = fs.realpathSync(path.join(fixtures, 'asar'))
+        const p = path.join('unpack.asar', 'a.txt')
+        fs.realpath(path.join(parent, p), (err, r) => {
           assert.equal(err, null)
           assert.equal(r, path.join(parent, p))
           done()
         })
       })
 
-      it('throws ENOENT error when can not find file', function (done) {
-        var parent = fs.realpathSync(path.join(fixtures, 'asar'))
-        var p = path.join('a.asar', 'not-exist')
-        fs.realpath(path.join(parent, p), function (err) {
+      it('throws ENOENT error when can not find file', done => {
+        const parent = fs.realpathSync(path.join(fixtures, 'asar'))
+        const p = path.join('a.asar', 'not-exist')
+        fs.realpath(path.join(parent, p), err => {
           assert.equal(err.code, 'ENOENT')
           done()
         })
       })
     })
+
+    describe('fs.realpath.native', () => {
+      it('returns real path root', done => {
+        const parent = fs.realpathSync.native(path.join(fixtures, 'asar'))
+        const p = 'a.asar'
+        fs.realpath.native(path.join(parent, p), (err, r) => {
+          assert.equal(err, null)
+          assert.equal(r, path.join(parent, p))
+          done()
+        })
+      })
+
+      it('returns real path of a normal file', done => {
+        const parent = fs.realpathSync.native(path.join(fixtures, 'asar'))
+        const p = path.join('a.asar', 'file1')
+        fs.realpath.native(path.join(parent, p), (err, r) => {
+          assert.equal(err, null)
+          assert.equal(r, path.join(parent, p))
+          done()
+        })
+      })
+
+      it('returns real path of a normal directory', done => {
+        const parent = fs.realpathSync.native(path.join(fixtures, 'asar'))
+        const p = path.join('a.asar', 'dir1')
+        fs.realpath.native(path.join(parent, p), (err, r) => {
+          assert.equal(err, null)
+          assert.equal(r, path.join(parent, p))
+          done()
+        })
+      })
+
+      it('returns real path of a linked file', done => {
+        const parent = fs.realpathSync.native(path.join(fixtures, 'asar'))
+        const p = path.join('a.asar', 'link2', 'link1')
+        fs.realpath.native(path.join(parent, p), (err, r) => {
+          assert.equal(err, null)
+          assert.equal(r, path.join(parent, 'a.asar', 'file1'))
+          done()
+        })
+      })
+
+      it('returns real path of a linked directory', done => {
+        const parent = fs.realpathSync.native(path.join(fixtures, 'asar'))
+        const p = path.join('a.asar', 'link2', 'link2')
+        fs.realpath.native(path.join(parent, p), (err, r) => {
+          assert.equal(err, null)
+          assert.equal(r, path.join(parent, 'a.asar', 'dir1'))
+          done()
+        })
+      })
+
+      it('returns real path of an unpacked file', done => {
+        const parent = fs.realpathSync.native(path.join(fixtures, 'asar'))
+        const p = path.join('unpack.asar', 'a.txt')
+        fs.realpath.native(path.join(parent, p), (err, r) => {
+          assert.equal(err, null)
+          assert.equal(r, path.join(parent, p))
+          done()
+        })
+      })
+
+      it('throws ENOENT error when can not find file', done => {
+        const parent = fs.realpathSync.native(path.join(fixtures, 'asar'))
+        const p = path.join('a.asar', 'not-exist')
+        fs.realpath.native(path.join(parent, p), err => {
+          assert.equal(err.code, 'ENOENT')
+          done()
+        })
+      })
+    })
+
     describe('fs.readdirSync', function () {
       it('reads dirs from root', function () {
         var p = path.join(fixtures, 'asar', 'a.asar')
@@ -549,6 +671,60 @@ describe('asar package', function () {
       })
     })
 
+    describe('fs.exists', function () {
+      it('handles an existing file', function (done) {
+        var p = path.join(fixtures, 'asar', 'a.asar', 'file1')
+        // eslint-disable-next-line
+        fs.exists(p, function (exists) {
+          assert.equal(exists, true)
+          done()
+        })
+      })
+
+      it('handles a non-existent file', function (done) {
+        var p = path.join(fixtures, 'asar', 'a.asar', 'not-exist')
+        // eslint-disable-next-line
+        fs.exists(p, function (exists) {
+          assert.equal(exists, false)
+          done()
+        })
+      })
+
+      it('promisified version handles an existing file', (done) => {
+        var p = path.join(fixtures, 'asar', 'a.asar', 'file1')
+        // eslint-disable-next-line
+        util.promisify(fs.exists)(p).then(exists => {
+          assert.equal(exists, true)
+          done()
+        })
+      })
+
+      it('promisified version handles a non-existent file', function (done) {
+        var p = path.join(fixtures, 'asar', 'a.asar', 'not-exist')
+        // eslint-disable-next-line
+        util.promisify(fs.exists)(p).then(exists => {
+          assert.equal(exists, false)
+          done()
+        })
+      })
+    })
+
+    describe('fs.existsSync', function () {
+      it('handles an existing file', function () {
+        var p = path.join(fixtures, 'asar', 'a.asar', 'file1')
+        assert.doesNotThrow(function () {
+          assert.equal(fs.existsSync(p), true)
+        })
+      })
+
+      it('handles a non-existent file', function () {
+        var p = path.join(fixtures, 'asar', 'a.asar', 'not-exist')
+        assert.doesNotThrow(function () {
+          assert.equal(fs.existsSync(p), false)
+        })
+      })
+    })
+
     describe('fs.access', function () {
       it('accesses a normal file', function (done) {
         var p = path.join(fixtures, 'asar', 'a.asar', 'file1')
@@ -644,6 +820,12 @@ describe('asar package', function () {
           done()
         })
       })
+
+      it('can be promisified', () => {
+        return util.promisify(ChildProcess.exec)('echo ' + echo + ' foo bar').then(({ stdout }) => {
+          assert.equal(stdout.toString().replace(/\r/g, ''), echo + ' foo bar\n')
+        })
+      })
     })
 
     describe('child_process.execSync', function () {
@@ -680,23 +862,41 @@ describe('asar package', function () {
         var output = execFileSync(echo, ['test'])
         assert.equal(String(output), 'test\n')
       })
+
+      it('can be promisified', () => {
+        return util.promisify(ChildProcess.execFile)(echo, ['test']).then(({ stdout }) => {
+          assert.equal(stdout, 'test\n')
+        })
+      })
     })
 
-    describe('internalModuleReadFile', function () {
-      var internalModuleReadFile = process.binding('fs').internalModuleReadFile
+    describe('internalModuleReadJSON', function () {
+      var internalModuleReadJSON = process.binding('fs').internalModuleReadJSON
 
       it('read a normal file', function () {
         var file1 = path.join(fixtures, 'asar', 'a.asar', 'file1')
-        assert.equal(internalModuleReadFile(file1).toString().trim(), 'file1')
+        assert.equal(internalModuleReadJSON(file1).toString().trim(), 'file1')
         var file2 = path.join(fixtures, 'asar', 'a.asar', 'file2')
-        assert.equal(internalModuleReadFile(file2).toString().trim(), 'file2')
+        assert.equal(internalModuleReadJSON(file2).toString().trim(), 'file2')
         var file3 = path.join(fixtures, 'asar', 'a.asar', 'file3')
-        assert.equal(internalModuleReadFile(file3).toString().trim(), 'file3')
+        assert.equal(internalModuleReadJSON(file3).toString().trim(), 'file3')
       })
 
       it('reads a normal file with unpacked files', function () {
         var p = path.join(fixtures, 'asar', 'unpack.asar', 'a.txt')
-        assert.equal(internalModuleReadFile(p).toString().trim(), 'a')
+        assert.equal(internalModuleReadJSON(p).toString().trim(), 'a')
+      })
+    })
+
+    describe('util.promisify', function () {
+      it('can promisify all fs functions', function () {
+        const originalFs = require('original-fs')
+
+        for (const key in originalFs) {
+          if (originalFs[key][util.promisify.custom] && !fs[key][util.promisify.custom]) {
+            assert(false, `fs.${key}[util.promisify.custom] missing`)
+          }
+        }
       })
     })
 

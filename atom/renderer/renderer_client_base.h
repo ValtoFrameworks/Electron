@@ -21,7 +21,7 @@ class RendererClientBase : public content::ContentRendererClient {
   ~RendererClientBase() override;
 
   virtual void DidCreateScriptContext(v8::Handle<v8::Context> context,
-                                      content::RenderFrame* render_frame) = 0;
+                                      content::RenderFrame* render_frame);
   virtual void WillReleaseScriptContext(v8::Handle<v8::Context> context,
                                         content::RenderFrame* render_frame) = 0;
   virtual void DidClearWindowObject(content::RenderFrame* render_frame);
@@ -46,10 +46,6 @@ class RendererClientBase : public content::ContentRendererClient {
   bool OverrideCreatePlugin(content::RenderFrame* render_frame,
                             const blink::WebPluginParams& params,
                             blink::WebPlugin** plugin) override;
-  content::BrowserPluginDelegate* CreateBrowserPluginDelegate(
-      content::RenderFrame* render_frame,
-      const std::string& mime_type,
-      const GURL& original_url) override;
   void AddSupportedKeySystems(
       std::vector<std::unique_ptr<::media::KeySystemProperties>>* key_systems)
       override;
@@ -57,6 +53,9 @@ class RendererClientBase : public content::ContentRendererClient {
  private:
   std::unique_ptr<PreferencesManager> preferences_manager_;
   bool isolated_world_;
+
+  // An increasing ID used for indentifying an V8 context in this process.
+  int next_context_id_ = 0;
 };
 
 }  // namespace atom

@@ -144,9 +144,18 @@ void ConvertRemovedJumpListItems(IObjectArray* in,
 
 namespace atom {
 
+JumpListItem::JumpListItem() = default;
+JumpListItem::JumpListItem(const JumpListItem&) = default;
+JumpListItem::~JumpListItem() = default;
+JumpListCategory::JumpListCategory() = default;
+JumpListCategory::JumpListCategory(const JumpListCategory&) = default;
+JumpListCategory::~JumpListCategory() = default;
+
 JumpList::JumpList(const base::string16& app_id) : app_id_(app_id) {
   destinations_.CoCreateInstance(CLSID_DestinationList);
 }
+
+JumpList::~JumpList() = default;
 
 bool JumpList::Begin(int* min_items, std::vector<JumpListItem>* removed_items) {
   DCHECK(destinations_);
@@ -266,9 +275,9 @@ JumpListResult JumpList::AppendCategory(const JumpListCategory& category) {
         result = JumpListResult::GENERIC_ERROR;
     }
   } else {
-    auto hr = destinations_->AppendCategory(category.name.c_str(), items);
+    HRESULT hr = destinations_->AppendCategory(category.name.c_str(), items);
     if (FAILED(hr)) {
-      if (hr == 0x80040F03) {
+      if (hr == static_cast<HRESULT>(0x80040F03)) {
         LOG(ERROR) << "Failed to append custom category "
                    << "'" << category.name << "' "
                    << "to Jump List due to missing file type registration.";

@@ -22,7 +22,7 @@ namespace std {
 template <typename Type1, typename Type2>
 struct hash<std::pair<Type1, Type2>> {
   std::size_t operator()(std::pair<Type1, Type2> value) const {
-    return base::HashInts<Type1, Type2>(value.first, value.second);
+    return base::HashInts(base::Hash(value.first), value.second);
   }
 };
 
@@ -100,7 +100,7 @@ void RequestGarbageCollectionForTesting(v8::Isolate* isolate) {
 }
 
 bool IsSameOrigin(const GURL& l, const GURL& r) {
-  return url::Origin(l).IsSameOriginWith(url::Origin(r));
+  return url::Origin::Create(l).IsSameOriginWith(url::Origin::Create(r));
 }
 
 void Initialize(v8::Local<v8::Object> exports,
@@ -116,8 +116,9 @@ void Initialize(v8::Local<v8::Object> exports,
   dict.SetMethod("setRemoteCallbackFreer", &atom::RemoteCallbackFreer::BindTo);
   dict.SetMethod("setRemoteObjectFreer", &atom::RemoteObjectFreer::BindTo);
   dict.SetMethod("createIDWeakMap", &atom::api::KeyWeakMap<int32_t>::Create);
-  dict.SetMethod("createDoubleIDWeakMap",
-                 &atom::api::KeyWeakMap<std::pair<int64_t, int32_t>>::Create);
+  dict.SetMethod(
+      "createDoubleIDWeakMap",
+      &atom::api::KeyWeakMap<std::pair<std::string, int32_t>>::Create);
   dict.SetMethod("requestGarbageCollectionForTesting",
                  &RequestGarbageCollectionForTesting);
   dict.SetMethod("isSameOrigin", &IsSameOrigin);

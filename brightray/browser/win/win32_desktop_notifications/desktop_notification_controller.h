@@ -76,8 +76,7 @@ class DesktopNotificationController {
   void DestroyToast(ToastInstance& inst);
 
  private:
-  static constexpr const TCHAR class_name_[] =
-      TEXT("DesktopNotificationController");
+  static const TCHAR class_name_[];
 
   HWND hwnd_controller_ = NULL;
   HFONT caption_font_ = NULL, body_font_ = NULL;
@@ -88,8 +87,10 @@ class DesktopNotificationController {
 
 class DesktopNotificationController::Notification {
  public:
-  Notification() = default;
+  Notification();
   explicit Notification(const std::shared_ptr<NotificationData>& data);
+  Notification(const Notification&);
+  ~Notification();
 
   bool operator==(const Notification& other) const;
 

@@ -118,7 +118,6 @@ const char kGuestInstanceID[] = "guestInstanceId";
 
 // Web runtime features.
 const char kExperimentalFeatures[] = "experimentalFeatures";
-const char kExperimentalCanvasFeatures[] = "experimentalCanvasFeatures";
 
 // Opener window's ID.
 const char kOpenerID[] = "openerId";
@@ -127,8 +126,7 @@ const char kOpenerID[] = "openerId";
 const char kScrollBounce[] = "scrollBounce";
 
 // Enable blink features.
-// TODO(kevinsawicki) Rename to enableBlinkFeatures in 2.0
-const char kBlinkFeatures[] = "blinkFeatures";
+const char kEnableBlinkFeatures[] = "enableBlinkFeatures";
 
 // Disable blink features.
 const char kDisableBlinkFeatures[] = "disableBlinkFeatures";
@@ -139,7 +137,19 @@ const char kNodeIntegrationInWorker[] = "nodeIntegrationInWorker";
 // Enable the web view tag.
 const char kWebviewTag[] = "webviewTag";
 
+const char kNativeWindowOpen[] = "nativeWindowOpen";
+
 const char kCustomArgs[] = "additionalArguments";
+
+const char kPlugins[] = "plugins";
+
+const char kSandbox[] = "sandbox";
+
+const char kWebSecurity[] = "webSecurity";
+
+const char kAllowRunningInsecureContent[] = "allowRunningInsecureContent";
+
+const char kOffscreen[] = "offscreen";
 
 }  // namespace options
 
@@ -178,13 +188,9 @@ const char kAppUserModelId[] = "app-user-model-id";
 // The application path
 const char kAppPath[] = "app-path";
 
-// The context ID for this process
-const char kContextId[] = "context-id";
-
 // The command line switch versions of the options.
 const char kBackgroundColor[] = "background-color";
 const char kPreloadScript[] = "preload";
-const char kPreloadURL[] = "preload-url";
 const char kPreloadScripts[] = "preload-scripts";
 const char kNodeIntegration[] = "node-integration";
 const char kContextIsolation[] = "context-isolation";
@@ -203,6 +209,9 @@ const char kNodeIntegrationInWorker[] = "node-integration-in-worker";
 const char kWidevineCdmPath[] = "widevine-cdm-path";
 // Widevine CDM version.
 const char kWidevineCdmVersion[] = "widevine-cdm-version";
+
+// Forces the maximum disk space to be used by the disk cache, in bytes.
+const char kDiskCacheSize[] = "disk-cache-size";
 
 }  // namespace switches
 

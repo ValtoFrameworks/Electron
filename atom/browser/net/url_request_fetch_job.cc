@@ -9,6 +9,7 @@
 
 #include "atom/browser/api/atom_api_session.h"
 #include "atom/browser/atom_browser_context.h"
+#include "base/guid.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/string_util.h"
 #include "native_mate/dictionary.h"
@@ -93,23 +94,22 @@ void URLRequestFetchJob::BeforeStartInUI(v8::Isolate* isolate,
   if (options.Get("session", &val)) {
     if (val->IsNull()) {
       // We have to create the URLRequestContextGetter on UI thread.
-      url_request_context_getter_ = new brightray::URLRequestContextGetter(
-          this, nullptr, base::FilePath(), true,
-          BrowserThread::GetTaskRunnerForThread(BrowserThread::IO), nullptr,
-          content::URLRequestInterceptorScopedVector());
+      custom_browser_context_ =
+          AtomBrowserContext::From(base::GenerateGUID(), true);
+      url_request_context_getter_ =
+          custom_browser_context_->GetRequestContext();
     } else {
       mate::Handle<api::Session> session;
       if (mate::ConvertFromV8(isolate, val, &session) && !session.IsEmpty()) {
         AtomBrowserContext* browser_context = session->browser_context();
-        url_request_context_getter_ =
-            browser_context->url_request_context_getter();
+        url_request_context_getter_ = browser_context->GetRequestContext();
       }
     }
   }
 }
 
 void URLRequestFetchJob::StartAsync(std::unique_ptr<base::Value> options) {
-  if (!options->IsType(base::Value::Type::DICTIONARY)) {
+  if (!options->is_dict()) {
     NotifyStartError(net::URLRequestStatus(net::URLRequestStatus::FAILED,
                                            net::ERR_NOT_IMPLEMENTED));
     return;

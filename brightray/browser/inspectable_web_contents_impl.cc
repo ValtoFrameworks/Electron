@@ -7,6 +7,7 @@
 
 #include "brightray/browser/inspectable_web_contents_impl.h"
 
+#include "atom/common/platform_util.h"
 #include "base/guid.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
@@ -47,7 +48,7 @@ const double kPresetZoomFactors[] = {0.25, 0.333, 0.5,  0.666, 0.75, 0.9,
                                      2.5,  3.0,   4.0,  5.0};
 
 const char kChromeUIDevToolsURL[] =
-    "chrome-devtools://devtools/bundled/inspector.html?"
+    "chrome-devtools://devtools/bundled/devtools_app.html?"
     "remoteBase=%s&"
     "can_dock=%s&"
     "toolbarColor=rgba(223,223,223,1)&"
@@ -166,14 +167,18 @@ int ResponseWriter::Initialize(const net::CompletionCallback& callback) {
 int ResponseWriter::Write(net::IOBuffer* buffer,
                           int num_bytes,
                           const net::CompletionCallback& callback) {
-  auto* id = new base::Value(stream_id_);
-  base::Value* chunk = new base::Value(std::string(buffer->data(), num_bytes));
+  std::string chunk = std::string(buffer->data(), num_bytes);
+  if (!base::IsStringUTF8(chunk))
+    return num_bytes;
+
+  base::Value* id = new base::Value(stream_id_);
+  base::Value* chunk_value = new base::Value(chunk);
 
   content::BrowserThread::PostTask(
       content::BrowserThread::UI, FROM_HERE,
       base::BindOnce(&InspectableWebContentsImpl::CallClientFunction, bindings_,
                      "DevToolsAPI.streamWrite", base::Owned(id),
-                     base::Owned(chunk), nullptr));
+                     base::Owned(chunk_value), nullptr));
   return num_bytes;
 }
 
@@ -197,15 +202,20 @@ void InspectableWebContentsImpl::RegisterPrefs(PrefRegistrySimple* registry) {
 }
 
 InspectableWebContentsImpl::InspectableWebContentsImpl(
-    content::WebContents* web_contents)
+    content::WebContents* web_contents,
+    bool is_guest)
     : frontend_loaded_(false),
       can_dock_(true),
       delegate_(nullptr),
+      pref_service_(
+          static_cast<BrowserContext*>(web_contents->GetBrowserContext())
+              ->prefs()),
       web_contents_(web_contents),
+      is_guest_(is_guest),
+      view_(CreateInspectableContentsView(this)),
       weak_factory_(this) {
-  auto* context =
-      static_cast<BrowserContext*>(web_contents_->GetBrowserContext());
-  pref_service_ = context->prefs();
+  if (is_guest)
+    return;
   auto* bounds_dict = pref_service_->GetDictionary(kDevToolsBoundsPref);
   if (bounds_dict) {
     DictionaryToRect(*bounds_dict, &devtools_bounds_);
@@ -230,8 +240,6 @@ InspectableWebContentsImpl::InspectableWebContentsImpl(
           display.y() + (display.height() - devtools_bounds_.height()) / 2);
     }
   }
-
-  view_.reset(CreateInspectableContentsView(this));
 }
 
 InspectableWebContentsImpl::~InspectableWebContentsImpl() {
@@ -264,7 +272,7 @@ content::WebContents* InspectableWebContentsImpl::GetDevToolsWebContents()
 
 void InspectableWebContentsImpl::InspectElement(int x, int y) {
   if (agent_host_.get())
-    agent_host_->InspectElement(this, x, y);
+    agent_host_->InspectElement(web_contents_->GetMainFrame(), x, y);
 }
 
 void InspectableWebContentsImpl::SetDelegate(
@@ -275,6 +283,14 @@ void InspectableWebContentsImpl::SetDelegate(
 InspectableWebContentsDelegate* InspectableWebContentsImpl::GetDelegate()
     const {
   return delegate_;
+}
+
+bool InspectableWebContentsImpl::IsGuest() const {
+  return is_guest_;
+}
+
+void InspectableWebContentsImpl::ReleaseWebContents() {
+  web_contents_.release();
 }
 
 void InspectableWebContentsImpl::SetDockState(const std::string& state) {
@@ -327,7 +343,8 @@ void InspectableWebContentsImpl::CloseDevTools() {
       managed_devtools_web_contents_.reset();
     }
     embedder_message_dispatcher_.reset();
-    web_contents_->Focus();
+    if (!IsGuest())
+      web_contents_->Focus();
   }
 }
 
@@ -467,7 +484,7 @@ void InspectableWebContentsImpl::LoadNetworkResource(
   net::URLFetcher* fetcher =
       (net::URLFetcher::Create(gurl, net::URLFetcher::GET, this)).release();
   pending_requests_[fetcher] = callback;
-  fetcher->SetRequestContext(browser_context->url_request_context_getter());
+  fetcher->SetRequestContext(browser_context->GetRequestContext());
   fetcher->SetExtraRequestHeaders(headers);
   fetcher->SaveResponseWithWriter(
       std::unique_ptr<net::URLFetcherResponseWriter>(
@@ -484,6 +501,14 @@ void InspectableWebContentsImpl::SetIsDocked(const DispatchCallback& callback,
 }
 
 void InspectableWebContentsImpl::OpenInNewTab(const std::string& url) {}
+
+void InspectableWebContentsImpl::ShowItemInFolder(
+    const std::string& file_system_path) {
+  if (file_system_path.empty())
+    return;
+  base::FilePath path = base::FilePath::FromUTF8Unsafe(file_system_path);
+  platform_util::ShowItemInFolder(path);
+}
 
 void InspectableWebContentsImpl::SaveToFile(const std::string& url,
                                             const std::string& content,
@@ -543,6 +568,10 @@ void InspectableWebContentsImpl::SearchInPath(
 void InspectableWebContentsImpl::SetWhitelistedShortcuts(
     const std::string& message) {}
 
+void InspectableWebContentsImpl::SetEyeDropperActive(bool active) {}
+void InspectableWebContentsImpl::ShowCertificateViewer(
+    const std::string& cert_chain) {}
+
 void InspectableWebContentsImpl::ZoomIn() {
   double new_level = GetNextZoomLevel(GetDevToolsZoomLevel(), false);
   SetZoomLevelForWebContents(GetDevToolsWebContents(), new_level);
@@ -560,7 +589,23 @@ void InspectableWebContentsImpl::ResetZoom() {
   UpdateDevToolsZoomLevel(0.);
 }
 
+void InspectableWebContentsImpl::SetDevicesDiscoveryConfig(
+    bool discover_usb_devices,
+    bool port_forwarding_enabled,
+    const std::string& port_forwarding_config,
+    bool network_discovery_enabled,
+    const std::string& network_discovery_config) {}
+
 void InspectableWebContentsImpl::SetDevicesUpdatesEnabled(bool enabled) {}
+
+void InspectableWebContentsImpl::PerformActionOnRemotePage(
+    const std::string& page_id,
+    const std::string& action) {}
+
+void InspectableWebContentsImpl::OpenRemotePage(const std::string& browser_id,
+                                                const std::string& url) {}
+
+void InspectableWebContentsImpl::OpenNodeFrontend() {}
 
 void InspectableWebContentsImpl::DispatchProtocolMessageFromDevToolsFrontend(
     const std::string& message) {
@@ -609,6 +654,8 @@ void InspectableWebContentsImpl::ClearPreferences() {
   update.Get()->Clear();
 }
 
+void InspectableWebContentsImpl::ConnectionReady() {}
+
 void InspectableWebContentsImpl::RegisterExtensionsAPI(
     const std::string& origin,
     const std::string& script) {
@@ -617,6 +664,11 @@ void InspectableWebContentsImpl::RegisterExtensionsAPI(
 
 void InspectableWebContentsImpl::HandleMessageFromDevToolsFrontend(
     const std::string& message) {
+  // TODO(alexeykuzmin): Should we expect it to exist?
+  if (!embedder_message_dispatcher_) {
+    return;
+  }
+
   std::string method;
   base::ListValue empty_params;
   base::ListValue* params = &empty_params;
@@ -660,8 +712,7 @@ void InspectableWebContentsImpl::DispatchProtocolMessage(
 }
 
 void InspectableWebContentsImpl::AgentHostClosed(
-    content::DevToolsAgentHost* agent_host,
-    bool replaced) {}
+    content::DevToolsAgentHost* agent_host) {}
 
 void InspectableWebContentsImpl::RenderFrameHostChanged(
     content::RenderFrameHost* old_host,
@@ -732,7 +783,7 @@ void InspectableWebContentsImpl::CloseContents(content::WebContents* source) {
 content::ColorChooser* InspectableWebContentsImpl::OpenColorChooser(
     content::WebContents* source,
     SkColor color,
-    const std::vector<content::ColorSuggestion>& suggestions) {
+    const std::vector<blink::mojom::ColorSuggestionPtr>& suggestions) {
   auto* delegate = web_contents_->GetDelegate();
   if (delegate)
     return delegate->OpenColorChooser(source, color, suggestions);

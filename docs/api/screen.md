@@ -95,10 +95,6 @@ Returns [`Point`](structures/point.md)
 
 The current absolute position of the mouse pointer.
 
-### `screen.getMenuBarHeight()` _macOS_
-
-Returns `Integer` - The height of the menu bar in pixels.
-
 ### `screen.getPrimaryDisplay()`
 
 Returns [`Display`](structures/display.md) - The primary display.
@@ -140,7 +136,7 @@ The DPI scale is performed relative to the display containing the DIP point.
 
 ### `screen.screenToDipRect(window, rect)` _Windows_
 
-* `window` [BrowserWindow](browser-window.md)
+* `window` [BrowserWindow](browser-window.md) | null
 * `rect` [Rectangle](structures/rectangle.md)
 
 Returns [`Rectangle`](structures/rectangle.md)
@@ -151,7 +147,7 @@ If `window` is null, scaling will be performed to the display nearest to `rect`.
 
 ### `screen.dipToScreenRect(window, rect)` _Windows_
 
-* `window` [BrowserWindow](browser-window.md)
+* `window` [BrowserWindow](browser-window.md) | null
 * `rect` [Rectangle](structures/rectangle.md)
 
 Returns [`Rectangle`](structures/rectangle.md)

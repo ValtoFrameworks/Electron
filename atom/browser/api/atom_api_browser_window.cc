@@ -55,7 +55,7 @@ BrowserWindow::BrowserWindow(v8::Isolate* isolate,
     base::DictionaryValue web_preferences_dict;
     if (mate::ConvertFromV8(isolate, web_preferences.GetHandle(),
                             &web_preferences_dict)) {
-      existing_preferences->dict()->Clear();
+      existing_preferences->Clear();
       existing_preferences->Merge(web_preferences_dict);
     }
   } else {
@@ -84,6 +84,11 @@ BrowserWindow::BrowserWindow(v8::Isolate* isolate,
     host->GetWidget()->AddInputEventObserver(this);
 
   InitWith(isolate, wrapper);
+
+#if defined(OS_MACOSX)
+  if (!window()->has_frame())
+    OverrideNSWindowContentView(web_contents->managed_web_contents());
+#endif
 
   // Init window after everything has been setup.
   window()->InitFromOptions(options);
@@ -155,7 +160,7 @@ void BrowserWindow::BeforeUnloadDialogCancelled() {
   window_unresponsive_closure_.Cancel();
 }
 
-void BrowserWindow::OnRendererUnresponsive(content::RenderWidgetHost*) {
+void BrowserWindow::OnRendererUnresponsive(content::RenderProcessHost*) {
   // Schedule the unresponsive shortly later, since we may receive the
   // responsive event soon. This could happen after the whole application had
   // blocked for a while.
@@ -270,6 +275,14 @@ void BrowserWindow::OnWindowResize() {
   TopLevelWindow::OnWindowResize();
 }
 
+void BrowserWindow::OnWindowLeaveFullScreen() {
+  TopLevelWindow::OnWindowLeaveFullScreen();
+#if defined(OS_MACOSX)
+  if (web_contents()->IsFullscreenForCurrentTab())
+    web_contents()->ExitFullscreen(true);
+#endif
+}
+
 void BrowserWindow::Focus() {
   if (api_web_contents_->IsOffScreen())
     FocusOnWebView();
@@ -298,9 +311,9 @@ void BrowserWindow::SetBrowserView(v8::Local<v8::Value> value) {
 #endif
 }
 
-void BrowserWindow::SetVibrancy(mate::Arguments* args) {
-  std::string type;
-  args->GetNext(&type);
+void BrowserWindow::SetVibrancy(v8::Isolate* isolate,
+                                v8::Local<v8::Value> value) {
+  std::string type = mate::V8ToString(value);
 
   auto* render_view_host = web_contents()->GetRenderViewHost();
   if (render_view_host) {
@@ -311,7 +324,7 @@ void BrowserWindow::SetVibrancy(mate::Arguments* args) {
       impl->SetBackgroundOpaque(type.empty() ? !window_->transparent() : false);
   }
 
-  TopLevelWindow::SetVibrancy(args);
+  TopLevelWindow::SetVibrancy(isolate, value);
 }
 
 void BrowserWindow::FocusOnWebView() {
@@ -336,7 +349,7 @@ v8::Local<v8::Value> BrowserWindow::GetWebContents(v8::Isolate* isolate) {
 // Convert draggable regions in raw format to SkRegion format.
 std::unique_ptr<SkRegion> BrowserWindow::DraggableRegionsToSkRegion(
     const std::vector<DraggableRegion>& regions) {
-  std::unique_ptr<SkRegion> sk_region(new SkRegion);
+  auto sk_region = std::make_unique<SkRegion>();
   for (const DraggableRegion& region : regions) {
     sk_region->op(
         region.bounds.x(), region.bounds.y(), region.bounds.right(),

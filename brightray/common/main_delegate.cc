@@ -7,6 +7,7 @@
 #include <memory>
 
 #include "base/command_line.h"
+#include "base/mac/bundle_locations.h"
 #include "base/path_service.h"
 #include "brightray/browser/browser_client.h"
 #include "brightray/common/content_client.h"
@@ -47,18 +48,28 @@ void LoadResourceBundle(const std::string& locale) {
   if (initialized)
     ui::ResourceBundle::CleanupSharedInstance();
 
+  // Load other resource files.
+  base::FilePath pak_dir;
+#if defined(OS_MACOSX)
+  pak_dir =
+      base::mac::FrameworkBundlePath().Append(FILE_PATH_LITERAL("Resources"));
+#else
+  PathService::Get(base::DIR_MODULE, &pak_dir);
+#endif
+
+#if defined(ELECTRON_GN_BUILD)
+  ui::ResourceBundle::InitSharedInstanceWithLocale(
+      locale, nullptr, ui::ResourceBundle::LOAD_COMMON_RESOURCES);
+  ui::ResourceBundle& bundle = ui::ResourceBundle::GetSharedInstance();
+  bundle.ReloadLocaleResources(locale);
+  bundle.AddDataPackFromPath(pak_dir.Append(FILE_PATH_LITERAL("resources.pak")),
+                             ui::SCALE_FACTOR_NONE);
+#else
   ui::ResourceBundle::InitSharedInstanceWithLocale(
       locale, nullptr, ui::ResourceBundle::DO_NOT_LOAD_COMMON_RESOURCES);
-
   ui::ResourceBundle& bundle = ui::ResourceBundle::GetSharedInstance();
   bundle.ReloadLocaleResources(locale);
 
-// Load other resource files.
-#if defined(OS_MACOSX)
-  LoadCommonResources();
-#else
-  base::FilePath pak_dir;
-  PathService::Get(base::DIR_MODULE, &pak_dir);
   bundle.AddDataPackFromPath(
       pak_dir.Append(FILE_PATH_LITERAL("content_shell.pak")),
       ui::GetSupportedScaleFactors()[0]);

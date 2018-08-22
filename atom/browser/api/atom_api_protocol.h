@@ -78,13 +78,13 @@ class Protocol : public mate::TrackableObject<Protocol> {
         net::URLRequest* request,
         net::NetworkDelegate* network_delegate) const override {
       RequestJob* request_job = new RequestJob(request, network_delegate);
-      request_job->SetHandlerInfo(isolate_, request_context_.get(), handler_);
+      request_job->SetHandlerInfo(isolate_, request_context_, handler_);
       return request_job;
     }
 
    private:
     v8::Isolate* isolate_;
-    scoped_refptr<net::URLRequestContextGetter> request_context_;
+    net::URLRequestContextGetter* request_context_;
     Protocol::Handler handler_;
 
     DISALLOW_COPY_AND_ASSIGN(CustomProtocolHandler);
@@ -117,9 +117,8 @@ class Protocol : public mate::TrackableObject<Protocol> {
         request_context_getter->job_factory());
     if (job_factory->IsHandledProtocol(scheme))
       return PROTOCOL_REGISTERED;
-    std::unique_ptr<CustomProtocolHandler<RequestJob>> protocol_handler(
-        new CustomProtocolHandler<RequestJob>(
-            isolate, request_context_getter.get(), handler));
+    auto protocol_handler = std::make_unique<CustomProtocolHandler<RequestJob>>(
+        isolate, request_context_getter.get(), handler);
     if (job_factory->SetProtocolHandler(scheme, std::move(protocol_handler)))
       return PROTOCOL_OK;
     else
@@ -166,9 +165,8 @@ class Protocol : public mate::TrackableObject<Protocol> {
     // It is possible a protocol is handled but can not be intercepted.
     if (!job_factory->HasProtocolHandler(scheme))
       return PROTOCOL_FAIL;
-    std::unique_ptr<CustomProtocolHandler<RequestJob>> protocol_handler(
-        new CustomProtocolHandler<RequestJob>(
-            isolate, request_context_getter.get(), handler));
+    auto protocol_handler = std::make_unique<CustomProtocolHandler<RequestJob>>(
+        isolate, request_context_getter.get(), handler);
     if (!job_factory->InterceptProtocol(scheme, std::move(protocol_handler)))
       return PROTOCOL_INTERCEPTED;
     return PROTOCOL_OK;

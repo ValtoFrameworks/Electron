@@ -11,6 +11,7 @@
 #include "atom/browser/native_window.h"
 #include "atom/browser/ui/message_box.h"
 #include "atom/browser/web_contents_preferences.h"
+#include "atom/common/options_switches.h"
 #include "base/bind.h"
 #include "base/strings/utf_string_conversions.h"
 #include "ui/gfx/image/image_skia.h"
@@ -32,12 +33,13 @@ AtomJavaScriptDialogManager::~AtomJavaScriptDialogManager() = default;
 
 void AtomJavaScriptDialogManager::RunJavaScriptDialog(
     content::WebContents* web_contents,
-    const GURL& origin_url,
+    content::RenderFrameHost* rfh,
     JavaScriptDialogType dialog_type,
     const base::string16& message_text,
     const base::string16& default_prompt_text,
     DialogClosedCallback callback,
     bool* did_suppress_message) {
+  auto origin_url = rfh->GetLastCommittedURL();
   const std::string& origin = origin_url.GetOrigin().spec();
   if (origin_counts_[origin] == kUserWantsNoMoreDialogs) {
     return std::move(callback).Run(false, base::string16());
@@ -60,13 +62,13 @@ void AtomJavaScriptDialogManager::RunJavaScriptDialog(
   std::string checkbox;
   if (origin_counts_[origin] > 1 && web_preferences &&
       web_preferences->IsEnabled("safeDialogs") &&
-      !web_preferences->dict()->GetString("safeDialogsMessage", &checkbox)) {
+      !web_preferences->GetPreference("safeDialogsMessage", &checkbox)) {
     checkbox = "Prevent this app from creating additional dialogs";
   }
 
   // Don't set parent for offscreen window.
   NativeWindow* window = nullptr;
-  if (web_preferences && !web_preferences->IsEnabled("offscreen")) {
+  if (web_preferences && !web_preferences->IsEnabled(options::kOffscreen)) {
     auto* relay = NativeWindowRelay::FromWebContents(web_contents);
     if (relay)
       window = relay->window.get();
@@ -83,6 +85,7 @@ void AtomJavaScriptDialogManager::RunJavaScriptDialog(
 
 void AtomJavaScriptDialogManager::RunBeforeUnloadDialog(
     content::WebContents* web_contents,
+    content::RenderFrameHost* rfh,
     bool is_reload,
     DialogClosedCallback callback) {
   bool default_prevented = api_web_contents_->Emit("will-prevent-unload");

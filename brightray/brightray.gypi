@@ -136,6 +136,7 @@
             ],
             'cflags_cc': [
               '-D__STRICT_ANSI__',
+              '-fno-exceptions',
               '-fno-rtti',
             ],
             'ldflags': [
@@ -154,10 +155,7 @@
               'WEBRTC_MAC',
              ],
           }],  # OS=="mac"
-          ['OS=="win"', {
-            'include_dirs': [
-              '<(libchromiumcontent_src_dir)/third_party/wtl/include',
-            ],
+          ['OS=="win"', {            
             'defines': [
               '_WIN32_WINNT=0x0602',
               'WINVER=0x0602',
@@ -207,6 +205,7 @@
           'SKIA_DLL',
           'USING_V8_SHARED',
           'WEBKIT_DLL',
+          'V8_ENABLE_CHECKS',
         ],
         'msvs_settings': {
           'VCCLCompilerTool': {
@@ -250,7 +249,7 @@
             # perform FPO regardless, so we must explicitly disable.
             # We still want the false setting above to avoid having
             # "/Oy /Oy-" and warnings about overriding.
-            'AdditionalOptions': ['/Oy-', '/d2guard4'],
+            'AdditionalOptions': ['/Oy-', '/guard:cf'],
           },
           'VCLibrarianTool': {
             'LinkTimeCodeGeneration': 'true',  # /LTCG

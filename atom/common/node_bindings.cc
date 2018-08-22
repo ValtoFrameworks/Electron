@@ -15,7 +15,6 @@
 #include "base/base_paths.h"
 #include "base/command_line.h"
 #include "base/environment.h"
-#include "base/files/file_path.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
@@ -33,13 +32,13 @@
   V(atom_browser_browser_view)               \
   V(atom_browser_content_tracing)            \
   V(atom_browser_debugger)                   \
-  V(atom_browser_desktop_capturer)           \
   V(atom_browser_dialog)                     \
   V(atom_browser_download_item)              \
   V(atom_browser_global_shortcut)            \
   V(atom_browser_in_app_purchase)            \
   V(atom_browser_menu)                       \
   V(atom_browser_net)                        \
+  V(atom_browser_net_log)                    \
   V(atom_browser_power_monitor)              \
   V(atom_browser_power_save_blocker)         \
   V(atom_browser_protocol)                   \
@@ -67,7 +66,12 @@
 
 #define ELECTRON_VIEW_MODULES(V) \
   V(atom_browser_box_layout)     \
-  V(atom_browser_layout_manager)
+  V(atom_browser_button)         \
+  V(atom_browser_label_button)   \
+  V(atom_browser_layout_manager) \
+  V(atom_browser_text_field)
+
+#define ELECTRON_DESKTOP_CAPTURER_MODULE(V) V(atom_browser_desktop_capturer)
 
 // This is used to load built-in modules. Instead of using
 // __attribute__((constructor)), we call the _register_<modname>
@@ -78,6 +82,9 @@
 ELECTRON_BUILTIN_MODULES(V)
 #if defined(ENABLE_VIEW_API)
 ELECTRON_VIEW_MODULES(V)
+#endif
+#if defined(ENABLE_DESKTOP_CAPTURER)
+ELECTRON_DESKTOP_CAPTURER_MODULE(V)
 #endif
 #undef V
 
@@ -103,6 +110,8 @@ void stop_and_close_uv_loop(uv_loop_t* loop) {
   DCHECK(!uv_loop_alive(loop));
   uv_loop_close(loop);
 }
+
+bool g_is_initialized = false;
 
 }  // namespace
 
@@ -175,7 +184,18 @@ void NodeBindings::RegisterBuiltinModules() {
 #if defined(ENABLE_VIEW_API)
   ELECTRON_VIEW_MODULES(V)
 #endif
+#if defined(ENABLE_DESKTOP_CAPTURER)
+  ELECTRON_DESKTOP_CAPTURER_MODULE(V)
+#endif
 #undef V
+}
+
+bool NodeBindings::IsInitialized() {
+  return g_is_initialized;
+}
+
+base::FilePath::StringType NodeBindings::GetHelperResourcesPath() {
+  return GetResourcesPath(false).value();
 }
 
 void NodeBindings::Initialize() {
@@ -203,6 +223,8 @@ void NodeBindings::Initialize() {
   if (browser_env_ == BROWSER || env->HasVar("ELECTRON_DEFAULT_ERROR_MODE"))
     SetErrorMode(GetErrorMode() & ~SEM_NOGPFAULTERRORBOX);
 #endif
+
+  g_is_initialized = true;
 }
 
 node::Environment* NodeBindings::CreateEnvironment(

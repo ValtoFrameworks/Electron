@@ -15,6 +15,7 @@
 #include <glib.h>  // for g_setenv()
 #endif
 
+#include "base/base_switches.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/message_loop/message_loop.h"
@@ -29,8 +30,9 @@
 #include "brightray/common/main_delegate.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/content_switches.h"
+#include "content/public/common/result_codes.h"
 #include "media/base/localized_strings.h"
-#include "net/proxy/proxy_resolver_v8.h"
+#include "net/proxy_resolution/proxy_resolver_v8.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -177,11 +179,23 @@ void OverrideAppLogsPath() {
 }
 #endif
 
-void BrowserMainParts::PreEarlyInitialization() {
-  std::unique_ptr<base::FeatureList> feature_list(new base::FeatureList);
-  // TODO(deepak1556): Disable guest webcontents based on OOPIF feature.
-  feature_list->InitializeFromCommandLine("", "GuestViewCrossProcessFrames");
+void BrowserMainParts::InitializeFeatureList() {
+  auto* cmd_line = base::CommandLine::ForCurrentProcess();
+  const auto enable_features =
+      cmd_line->GetSwitchValueASCII(switches::kEnableFeatures);
+  auto disable_features =
+      cmd_line->GetSwitchValueASCII(switches::kDisableFeatures);
+  auto feature_list = std::make_unique<base::FeatureList>();
+  feature_list->InitializeFromCommandLine(enable_features, disable_features);
   base::FeatureList::SetInstance(std::move(feature_list));
+}
+
+bool BrowserMainParts::ShouldContentCreateFeatureList() {
+  return false;
+}
+
+int BrowserMainParts::PreEarlyInitialization() {
+  InitializeFeatureList();
   OverrideAppLogsPath();
 #if defined(USE_X11)
   views::LinuxUI::SetInstance(BuildGtkUi());
@@ -192,6 +206,8 @@ void BrowserMainParts::PreEarlyInitialization() {
   // we can't shutdown properly while creating and initializing services.
   ui::SetX11ErrorHandlers(nullptr, nullptr);
 #endif
+
+  return content::RESULT_CODE_NORMAL_EXIT;
 }
 
 void BrowserMainParts::ToolkitInitialized() {

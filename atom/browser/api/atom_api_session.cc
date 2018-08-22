@@ -33,10 +33,10 @@
 #include "brightray/browser/media/media_device_id_salt.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/common/pref_names.h"
+#include "components/download/public/common/download_danger_type.h"
 #include "components/prefs/pref_service.h"
-#include "content/common/devtools/devtools_network_conditions.h"
-#include "content/common/devtools/devtools_network_controller.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/download_item_utils.h"
 #include "content/public/browser/download_manager_delegate.h"
 #include "content/public/browser/storage_partition.h"
 #include "native_mate/dictionary.h"
@@ -46,11 +46,13 @@
 #include "net/dns/host_cache.h"
 #include "net/http/http_auth_handler_factory.h"
 #include "net/http/http_auth_preferences.h"
-#include "net/proxy/proxy_config_service_fixed.h"
-#include "net/proxy/proxy_service.h"
+#include "net/proxy_resolution/proxy_config_service_fixed.h"
+#include "net/proxy_resolution/proxy_service.h"
 #include "net/url_request/static_http_user_agent_settings.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_getter.h"
+#include "services/network/throttling/network_conditions.h"
+#include "services/network/throttling/throttling_controller.h"
 #include "ui/base/l10n/l10n_util.h"
 
 using atom::api::Cookies;
@@ -242,7 +244,7 @@ class ResolveProxyHelper {
       : callback_(callback),
         original_thread_(base::ThreadTaskRunnerHandle::Get()) {
     scoped_refptr<net::URLRequestContextGetter> context_getter =
-        browser_context->url_request_context_getter();
+        browser_context->GetRequestContext();
     context_getter->GetNetworkTaskRunner()->PostTask(
         FROM_HERE, base::BindOnce(&ResolveProxyHelper::ResolveProxy,
                                   base::Unretained(this), context_getter, url));
@@ -261,8 +263,8 @@ class ResolveProxyHelper {
                     const GURL& url) {
     DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
 
-    net::ProxyService* proxy_service =
-        context_getter->GetURLRequestContext()->proxy_service();
+    net::ProxyResolutionService* proxy_service =
+        context_getter->GetURLRequestContext()->proxy_resolution_service();
     net::CompletionCallback completion_callback = base::Bind(
         &ResolveProxyHelper::OnResolveProxyCompleted, base::Unretained(this));
 
@@ -278,7 +280,7 @@ class ResolveProxyHelper {
 
   Session::ResolveProxyCallback callback_;
   net::ProxyInfo proxy_info_;
-  net::ProxyService::PacRequest* pac_req_;
+  net::ProxyResolutionService::Request* pac_req_;
   scoped_refptr<base::SingleThreadTaskRunner> original_thread_;
 
   DISALLOW_COPY_AND_ASSIGN(ResolveProxyHelper);
@@ -344,7 +346,8 @@ void DoCacheActionInIO(
 void SetProxyInIO(scoped_refptr<net::URLRequestContextGetter> getter,
                   const net::ProxyConfig& config,
                   const base::Closure& callback) {
-  auto* proxy_service = getter->GetURLRequestContext()->proxy_service();
+  auto* proxy_service =
+      getter->GetURLRequestContext()->proxy_resolution_service();
   proxy_service->ResetConfigService(
       base::WrapUnique(new net::ProxyConfigServiceFixed(config)));
   // Refetches and applies the new pac script if provided.
@@ -409,7 +412,7 @@ void AllowNTLMCredentialsForDomainsInIO(
     auto* auth_preferences = const_cast<net::HttpAuthPreferences*>(
         auth_handler->http_auth_preferences());
     if (auth_preferences)
-      auth_preferences->set_server_whitelist(domains);
+      auth_preferences->SetServerWhitelist(domains);
   }
 }
 
@@ -432,10 +435,10 @@ void DownloadIdCallback(content::DownloadManager* download_manager,
       base::GenerateGUID(), id, path, path, url_chain, GURL(), GURL(), GURL(),
       GURL(), mime_type, mime_type, start_time, base::Time(), etag,
       last_modified, offset, length, std::string(),
-      content::DownloadItem::INTERRUPTED,
-      content::DownloadDangerType::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS,
-      content::DOWNLOAD_INTERRUPT_REASON_NETWORK_TIMEOUT, false, base::Time(),
-      false, std::vector<content::DownloadItem::ReceivedSlice>());
+      download::DownloadItem::INTERRUPTED,
+      download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS,
+      download::DOWNLOAD_INTERRUPT_REASON_NETWORK_TIMEOUT, false, base::Time(),
+      false, std::vector<download::DownloadItem::ReceivedSlice>());
 }
 
 void SetDevToolsNetworkEmulationClientIdInIO(
@@ -448,15 +451,6 @@ void SetDevToolsNetworkEmulationClientIdInIO(
   AtomNetworkDelegate* network_delegate =
       static_cast<AtomNetworkDelegate*>(context->network_delegate());
   network_delegate->SetDevToolsNetworkEmulationClientId(client_id);
-}
-
-// Clear protocol handlers in IO thread.
-void ClearJobFactoryInIO(
-    scoped_refptr<brightray::URLRequestContextGetter> request_context_getter) {
-  auto* job_factory = static_cast<AtomURLRequestJobFactory*>(
-      request_context_getter->job_factory());
-  if (job_factory)
-    job_factory->Clear();
 }
 
 void DestroyGlobalHandle(v8::Isolate* isolate,
@@ -492,10 +486,6 @@ Session::Session(v8::Isolate* isolate, AtomBrowserContext* browser_context)
 }
 
 Session::~Session() {
-  auto* getter = browser_context_->GetRequestContext();
-  content::BrowserThread::PostTask(
-      content::BrowserThread::IO, FROM_HERE,
-      base::BindOnce(ClearJobFactoryInIO, base::RetainedRef(getter)));
   content::BrowserContext::GetDownloadManager(browser_context())
       ->RemoveObserver(this);
   DestroyGlobalHandle(isolate(), cookies_);
@@ -505,16 +495,18 @@ Session::~Session() {
 }
 
 void Session::OnDownloadCreated(content::DownloadManager* manager,
-                                content::DownloadItem* item) {
+                                download::DownloadItem* item) {
   if (item->IsSavePackageDownload())
     return;
 
   v8::Locker locker(isolate());
   v8::HandleScope handle_scope(isolate());
   auto handle = DownloadItem::Create(isolate(), item);
-  if (item->GetState() == content::DownloadItem::INTERRUPTED)
+  if (item->GetState() == download::DownloadItem::INTERRUPTED)
     handle->SetSavePath(item->GetTargetFilePath());
-  bool prevent_default = Emit("will-download", handle, item->GetWebContents());
+  content::WebContents* web_contents =
+      content::DownloadItemUtils::GetWebContents(item);
+  bool prevent_default = Emit("will-download", handle, web_contents);
   if (prevent_default) {
     item->Cancel(true);
     item->Remove();
@@ -575,39 +567,37 @@ void Session::SetDownloadPath(const base::FilePath& path) {
 }
 
 void Session::EnableNetworkEmulation(const mate::Dictionary& options) {
-  std::unique_ptr<content::DevToolsNetworkConditions> conditions;
+  std::unique_ptr<network::NetworkConditions> conditions;
   bool offline = false;
   double latency = 0.0, download_throughput = 0.0, upload_throughput = 0.0;
   if (options.Get("offline", &offline) && offline) {
-    conditions.reset(new content::DevToolsNetworkConditions(offline));
+    conditions.reset(new network::NetworkConditions(offline));
   } else {
     options.Get("latency", &latency);
     options.Get("downloadThroughput", &download_throughput);
     options.Get("uploadThroughput", &upload_throughput);
-    conditions.reset(new content::DevToolsNetworkConditions(
+    conditions.reset(new network::NetworkConditions(
         false, latency, download_throughput, upload_throughput));
   }
 
-  content::DevToolsNetworkController::SetNetworkState(
+  network::ThrottlingController::SetConditions(
       devtools_network_emulation_client_id_, std::move(conditions));
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
-      base::BindOnce(
-          &SetDevToolsNetworkEmulationClientIdInIO,
-          base::RetainedRef(browser_context_->url_request_context_getter()),
-          devtools_network_emulation_client_id_));
+      base::BindOnce(&SetDevToolsNetworkEmulationClientIdInIO,
+                     base::RetainedRef(browser_context_->GetRequestContext()),
+                     devtools_network_emulation_client_id_));
 }
 
 void Session::DisableNetworkEmulation() {
-  auto conditions = std::make_unique<content::DevToolsNetworkConditions>();
-  content::DevToolsNetworkController::SetNetworkState(
+  auto conditions = std::make_unique<network::NetworkConditions>();
+  network::ThrottlingController::SetConditions(
       devtools_network_emulation_client_id_, std::move(conditions));
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
-      base::BindOnce(
-          &SetDevToolsNetworkEmulationClientIdInIO,
-          base::RetainedRef(browser_context_->url_request_context_getter()),
-          std::string()));
+      base::BindOnce(&SetDevToolsNetworkEmulationClientIdInIO,
+                     base::RetainedRef(browser_context_->GetRequestContext()),
+                     std::string()));
 }
 
 void Session::SetCertVerifyProc(v8::Local<v8::Value> val,
@@ -821,7 +811,7 @@ void Session::BuildPrototype(v8::Isolate* isolate,
       .SetMethod("setDownloadPath", &Session::SetDownloadPath)
       .SetMethod("enableNetworkEmulation", &Session::EnableNetworkEmulation)
       .SetMethod("disableNetworkEmulation", &Session::DisableNetworkEmulation)
-      .SetMethod("_setCertificateVerifyProc", &Session::SetCertVerifyProc)
+      .SetMethod("setCertificateVerifyProc", &Session::SetCertVerifyProc)
       .SetMethod("setPermissionRequestHandler",
                  &Session::SetPermissionRequestHandler)
       .SetMethod("clearHostResolverCache", &Session::ClearHostResolverCache)

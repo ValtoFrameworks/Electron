@@ -1,5 +1,9 @@
+#ifndef NOMINMAX
 #define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
 #include "brightray/browser/win/win32_desktop_notifications/desktop_notification_controller.h"
 #include <windowsx.h>
 #include <algorithm>
@@ -34,6 +38,9 @@ HBITMAP CopyBitmap(HBITMAP bitmap) {
 
   return ret;
 }
+
+const TCHAR DesktopNotificationController::class_name_[] =
+      TEXT("DesktopNotificationController");
 
 HINSTANCE DesktopNotificationController::RegisterWndClasses() {
   // We keep a static `module` variable which serves a dual purpose:
@@ -83,7 +90,7 @@ LRESULT CALLBACK DesktopNotificationController::WndProc(HWND hwnd,
                                                         LPARAM lparam) {
   switch (message) {
     case WM_CREATE: {
-      auto& cs = reinterpret_cast<const CREATESTRUCT*&>(lparam);
+      auto*& cs = reinterpret_cast<const CREATESTRUCT*&>(lparam);
       SetWindowLongPtr(hwnd, 0, (LONG_PTR)cs->lpCreateParams);
     } break;
 
@@ -94,7 +101,7 @@ LRESULT CALLBACK DesktopNotificationController::WndProc(HWND hwnd,
       return 0;
 
     case WM_DISPLAYCHANGE: {
-      auto inst = Get(hwnd);
+      auto* inst = Get(hwnd);
       inst->ClearAssets();
       inst->AnimateAll();
     } break;
@@ -182,13 +189,13 @@ void DesktopNotificationController::AnimateAll() {
       POINT origin = {work_area.right,
                       work_area.bottom - metrics.Y(toast_margin_)};
 
-      auto hdwp = BeginDeferWindowPos(static_cast<int>(instances_.size()));
+      auto* hdwp = BeginDeferWindowPos(static_cast<int>(instances_.size()));
 
       for (auto&& inst : instances_) {
         if (!inst.hwnd)
           continue;
 
-        auto notification = Toast::Get(inst.hwnd);
+        auto* notification = Toast::Get(inst.hwnd);
         hdwp = notification->Animate(hdwp, origin);
         if (!hdwp)
           break;
@@ -245,7 +252,7 @@ void DesktopNotificationController::AnimateAll() {
     int target_pos = 0;
     for (auto&& inst : instances_) {
       if (inst.hwnd) {
-        auto toast = Toast::Get(inst.hwnd);
+        auto* toast = Toast::Get(inst.hwnd);
 
         if (toast->IsHighlighted())
           target_pos = toast->GetVerticalPosition();
@@ -288,9 +295,9 @@ void DesktopNotificationController::CloseNotification(
   }
 
   // Dismiss active toast
-  auto hwnd = GetToast(notification.data_.get());
+  auto* hwnd = GetToast(notification.data_.get());
   if (hwnd) {
-    auto toast = Toast::Get(hwnd);
+    auto* toast = Toast::Get(hwnd);
     toast->Dismiss();
   }
 }
@@ -303,8 +310,8 @@ void DesktopNotificationController::CheckQueue() {
 }
 
 void DesktopNotificationController::CreateToast(NotificationLink&& data) {
-  auto hinstance = RegisterWndClasses();
-  auto hwnd = Toast::Create(hinstance, data);
+  auto* hinstance = RegisterWndClasses();
+  auto* hwnd = Toast::Create(hinstance, data);
   if (hwnd) {
     int toast_pos = 0;
     if (!instances_.empty()) {
@@ -312,7 +319,7 @@ void DesktopNotificationController::CreateToast(NotificationLink&& data) {
       _ASSERT(item.hwnd);
 
       ScreenMetrics scr;
-      auto toast = Toast::Get(item.hwnd);
+      auto* toast = Toast::Get(item.hwnd);
       toast_pos = toast->GetVerticalPosition() + toast->GetHeight() +
                   scr.Y(toast_margin_);
     }
@@ -326,7 +333,7 @@ void DesktopNotificationController::CreateToast(NotificationLink&& data) {
                                       NULL, hinstance, this);
     }
 
-    auto toast = Toast::Get(hwnd);
+    auto* toast = Toast::Get(hwnd);
     toast->PopUp(toast_pos);
   }
 }
@@ -356,11 +363,17 @@ void DesktopNotificationController::DestroyToast(ToastInstance& inst) {
   }
 }
 
+DesktopNotificationController::Notification::Notification() = default;
+DesktopNotificationController::Notification::Notification(
+  const DesktopNotificationController::Notification&) = default;
+
 DesktopNotificationController::Notification::Notification(
     const shared_ptr<NotificationData>& data)
     : data_(data) {
   _ASSERT(data != nullptr);
 }
+
+DesktopNotificationController::Notification::~Notification() = default;
 
 bool DesktopNotificationController::Notification::operator==(
     const Notification& other) const {
@@ -392,9 +405,9 @@ void DesktopNotificationController::Notification::Set(std::wstring caption,
   data_->body_text = move(body_text);
   data_->image = CopyBitmap(image);
 
-  auto hwnd = data_->controller->GetToast(data_.get());
+  auto* hwnd = data_->controller->GetToast(data_.get());
   if (hwnd) {
-    auto toast = Toast::Get(hwnd);
+    auto* toast = Toast::Get(hwnd);
     toast->ResetContents();
   }
 
@@ -409,7 +422,7 @@ DesktopNotificationController::NotificationLink::NotificationLink(
 }
 
 DesktopNotificationController::NotificationLink::~NotificationLink() {
-  auto p = get();
+  auto* p = get();
   if (p)
     p->controller = nullptr;
 }

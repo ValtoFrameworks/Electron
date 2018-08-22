@@ -5,6 +5,7 @@
 #include "atom/browser/api/atom_api_cookies.h"
 
 #include "atom/browser/atom_browser_context.h"
+#include "atom/browser/request_context_delegate.h"
 #include "atom/common/native_mate_converters/callback.h"
 #include "atom/common/native_mate_converters/gurl_converter.h"
 #include "atom/common/native_mate_converters/value_converter.h"
@@ -14,7 +15,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "native_mate/dictionary.h"
 #include "native_mate/object_template_builder.h"
-#include "net/cookies/cookie_monster.h"
+#include "net/cookies/canonical_cookie.h"
 #include "net/cookies/cookie_store.h"
 #include "net/cookies/cookie_util.h"
 #include "net/url_request/url_request_context.h"
@@ -55,24 +56,20 @@ struct Converter<net::CanonicalCookie> {
 };
 
 template <>
-struct Converter<net::CookieStore::ChangeCause> {
+struct Converter<net::CookieChangeCause> {
   static v8::Local<v8::Value> ToV8(v8::Isolate* isolate,
-                                   const net::CookieStore::ChangeCause& val) {
+                                   const net::CookieChangeCause& val) {
     switch (val) {
-      case net::CookieStore::ChangeCause::INSERTED:
-      case net::CookieStore::ChangeCause::EXPLICIT:
-      case net::CookieStore::ChangeCause::EXPLICIT_DELETE_BETWEEN:
-      case net::CookieStore::ChangeCause::EXPLICIT_DELETE_PREDICATE:
-      case net::CookieStore::ChangeCause::EXPLICIT_DELETE_SINGLE:
-      case net::CookieStore::ChangeCause::EXPLICIT_DELETE_CANONICAL:
+      case net::CookieChangeCause::INSERTED:
+      case net::CookieChangeCause::EXPLICIT:
         return mate::StringToV8(isolate, "explicit");
-      case net::CookieStore::ChangeCause::OVERWRITE:
+      case net::CookieChangeCause::OVERWRITE:
         return mate::StringToV8(isolate, "overwrite");
-      case net::CookieStore::ChangeCause::EXPIRED:
+      case net::CookieChangeCause::EXPIRED:
         return mate::StringToV8(isolate, "expired");
-      case net::CookieStore::ChangeCause::EVICTED:
+      case net::CookieChangeCause::EVICTED:
         return mate::StringToV8(isolate, "evicted");
-      case net::CookieStore::ChangeCause::EXPIRED_OVERWRITE:
+      case net::CookieChangeCause::EXPIRED_OVERWRITE:
         return mate::StringToV8(isolate, "expired-overwrite");
       default:
         return mate::StringToV8(isolate, "unknown");
@@ -229,10 +226,27 @@ void SetCookieOnIO(scoped_refptr<net::URLRequestContextGetter> getter,
                            : base::Time::FromDoubleT(last_access_date);
   }
 
-  GetCookieStore(getter)->SetCookieWithDetailsAsync(
-      GURL(url), name, value, domain, path, creation_time, expiration_time,
-      last_access_time, secure, http_only, net::CookieSameSite::DEFAULT_MODE,
-      net::COOKIE_PRIORITY_DEFAULT, base::BindOnce(OnSetCookie, callback));
+  std::unique_ptr<net::CanonicalCookie> canonical_cookie(
+      net::CanonicalCookie::CreateSanitizedCookie(
+          GURL(url), name, value, domain, path, creation_time, expiration_time,
+          last_access_time, secure, http_only,
+          net::CookieSameSite::DEFAULT_MODE, net::COOKIE_PRIORITY_DEFAULT));
+  auto completion_callback = base::BindOnce(OnSetCookie, callback);
+  if (!canonical_cookie || !canonical_cookie->IsCanonical()) {
+    std::move(completion_callback).Run(false);
+    return;
+  }
+  if (url.empty()) {
+    std::move(completion_callback).Run(false);
+    return;
+  }
+  if (name.empty()) {
+    std::move(completion_callback).Run(false);
+    return;
+  }
+  GetCookieStore(getter)->SetCanonicalCookieAsync(
+      std::move(canonical_cookie), secure, http_only,
+      std::move(completion_callback));
 }
 
 }  // namespace
@@ -240,21 +254,23 @@ void SetCookieOnIO(scoped_refptr<net::URLRequestContextGetter> getter,
 Cookies::Cookies(v8::Isolate* isolate, AtomBrowserContext* browser_context)
     : browser_context_(browser_context) {
   Init(isolate);
-  auto subscription = browser_context->RegisterCookieChangeCallback(
-      base::Bind(&Cookies::OnCookieChanged, base::Unretained(this)));
-  browser_context->set_cookie_change_subscription(std::move(subscription));
+  cookie_change_subscription_ =
+      browser_context->GetRequestContextDelegate()
+          ->RegisterCookieChangeCallback(
+              base::Bind(&Cookies::OnCookieChanged, base::Unretained(this)));
 }
 
 Cookies::~Cookies() {}
 
 void Cookies::Get(const base::DictionaryValue& filter,
                   const GetCallback& callback) {
-  std::unique_ptr<base::DictionaryValue> copied(filter.CreateDeepCopy());
+  auto copy = base::DictionaryValue::From(
+      base::Value::ToUniquePtrValue(filter.Clone()));
   auto* getter = browser_context_->GetRequestContext();
   content::BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
-      base::BindOnce(GetCookiesOnIO, base::RetainedRef(getter),
-                     std::move(copied), callback));
+      base::BindOnce(GetCookiesOnIO, base::RetainedRef(getter), std::move(copy),
+                     callback));
 }
 
 void Cookies::Remove(const GURL& url,
@@ -269,12 +285,13 @@ void Cookies::Remove(const GURL& url,
 
 void Cookies::Set(const base::DictionaryValue& details,
                   const SetCallback& callback) {
-  std::unique_ptr<base::DictionaryValue> copied(details.CreateDeepCopy());
+  auto copy = base::DictionaryValue::From(
+      base::Value::ToUniquePtrValue(details.Clone()));
   auto* getter = browser_context_->GetRequestContext();
   content::BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
-      base::BindOnce(SetCookieOnIO, base::RetainedRef(getter),
-                     std::move(copied), callback));
+      base::BindOnce(SetCookieOnIO, base::RetainedRef(getter), std::move(copy),
+                     callback));
 }
 
 void Cookies::FlushStore(const base::Closure& callback) {

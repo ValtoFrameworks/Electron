@@ -4,13 +4,13 @@
     'product_name%': 'Electron',
     'company_name%': 'GitHub, Inc',
     'company_abbr%': 'github',
-    'version%': '0.0.0-dev',
+    'version%': '4.0.0-nightly.20180821',
     'js2c_input_dir': '<(SHARED_INTERMEDIATE_DIR)/js2c',
   },
   'includes': [
     'features.gypi',
     'filenames.gypi',
-    'vendor/native_mate/native_mate_files.gypi',
+    'native_mate/native_mate_files.gypi',
   ],
   'target_defaults': {
     'defines': [
@@ -23,6 +23,11 @@
           '<(source_root)/external_binaries',
         ],
       }],
+      ['enable_desktop_capturer==1', {
+        'defines': [
+          'ENABLE_DESKTOP_CAPTURER',
+        ],
+      }],  # enable_desktop_capturer==1
       ['enable_osr==1', {
         'defines': [
           'ENABLE_OSR',
@@ -43,6 +48,11 @@
           'ENABLE_VIEW_API',
         ],
       }],  # enable_view_api
+      ['enable_pepper_flash==1', {
+        'defines': [
+          'ENABLE_PEPPER_FLASH',
+        ],
+      }],  # enable_pepper_flash
     ],
   },
   'targets': [
@@ -153,9 +163,6 @@
           ],
         }],  # OS!="mac"
         ['OS=="win"', {
-          'include_dirs': [
-            '<(libchromiumcontent_dir)/gen/ui/resources',
-          ],
           'msvs_settings': {
             'VCManifestTool': {
               'EmbedManifest': 'true',
@@ -204,7 +211,7 @@
                 '<(libchromiumcontent_dir)/ui_resources_200_percent.pak',
                 '<(libchromiumcontent_dir)/views_resources_200_percent.pak',
                 '<(libchromiumcontent_dir)/natives_blob.bin',
-                '<(libchromiumcontent_dir)/snapshot_blob.bin',
+                '<(libchromiumcontent_dir)/v8_context_snapshot.bin',
                 'external_binaries/d3dcompiler_47.dll',
               ],
             },
@@ -244,7 +251,7 @@
                 '<(libchromiumcontent_dir)/ui_resources_200_percent.pak',
                 '<(libchromiumcontent_dir)/views_resources_200_percent.pak',
                 '<(libchromiumcontent_dir)/natives_blob.bin',
-                '<(libchromiumcontent_dir)/snapshot_blob.bin',
+                '<(libchromiumcontent_dir)/v8_context_snapshot.bin',
               ],
             },
           ],
@@ -265,8 +272,6 @@
         'NODE_SHARED_MODE',
         'HAVE_OPENSSL=1',
         'HAVE_INSPECTOR=1',
-        # This is defined in skia/skia_common.gypi.
-        'SK_SUPPORT_LEGACY_GETTOPDEVICE',
         # Disable warnings for g_settings_list_schemas.
         'GLIB_DISABLE_DEPRECATION_WARNINGS',
         # Defined in Chromium but not exposed in its gyp file.
@@ -280,9 +285,6 @@
         # See Chromium src/third_party/protobuf/BUILD.gn
         'GOOGLE_PROTOBUF_NO_RTTI',
         'GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER',
-
-        # Enables SkBitmap size 64 operations
-        'SK_SUPPORT_LEGACY_SAFESIZE64',
       ],
       'sources': [
         '<@(lib_sources)',
@@ -290,7 +292,7 @@
       'include_dirs': [
         '.',
         'chromium_src',
-        'vendor/native_mate',
+        'native_mate',
         # Include atom_natives.h.
         '<(SHARED_INTERMEDIATE_DIR)',
         # Include directories for uv and node.
@@ -331,6 +333,25 @@
             'vendor/pdf_viewer/pdf_viewer.gyp:pdf_viewer',
           ],
         }],  # enable_pdf_viewer
+        ['enable_pepper_flash==1', {
+          'include_dirs': [
+            '<(libchromiumcontent_src_dir)/chrome/browser/renderer_host/pepper',
+            '<(libchromiumcontent_src_dir)/chrome/renderer/pepper',
+          ],
+          'link_settings': {
+            'conditions': [
+              ['OS=="win"', {
+                'libraries': [
+                  '<(libchromiumcontent_dir)/pepper_flash.lib',
+                ]
+              }, {
+                'libraries': [
+                  '<(libchromiumcontent_dir)/libpepper_flash.a',
+                ]
+              }],
+            ],
+          },
+        }],  # enable_pepper_flash
         ['libchromiumcontent_component', {
           'link_settings': {
             'libraries': [ '<@(libchromiumcontent_v8_libraries)' ],
@@ -342,7 +363,9 @@
           ],
           'link_settings': {
             'libraries': [
+              '-ldwmapi.lib',
               '-limm32.lib',
+              '-lgdi32.lib',
               '-loleacc.lib',
               '-lcomctl32.lib',
               '-lcomdlg32.lib',
@@ -350,6 +373,7 @@
               '-lwinmm.lib',
               '-lcrypt32.lib',
               '-luiautomationcore.lib',
+              '-lPropsys.lib'
             ],
           },
           'dependencies': [
@@ -392,6 +416,13 @@
             'atom/browser/auto_updater_mac.mm',
             'atom/common/crash_reporter/crash_reporter_mac.h',
             'atom/common/crash_reporter/crash_reporter_mac.mm',
+          ],
+          'dependencies': [
+            # Somehow we have code from Chromium using crashpad, very likely
+            # from components/crash.
+            # Since we do not actually invoke code from components/crash, this
+            # dependency should be eventually optimized out by linker.
+            'vendor/crashpad/client/client.gyp:crashpad_client',
           ],
         }],  # OS=="mac" and mas_build==1
         ['OS=="linux"', {
@@ -633,10 +664,14 @@
           'mac_bundle': 1,
           'mac_bundle_resources': [
             'atom/common/resources/mac/MainMenu.xib',
-            '<(libchromiumcontent_dir)/content_shell.pak',
             '<(libchromiumcontent_dir)/icudtl.dat',
+            '<(libchromiumcontent_dir)/blink_image_resources_200_percent.pak',
+            '<(libchromiumcontent_dir)/content_resources_200_percent.pak',
+            '<(libchromiumcontent_dir)/content_shell.pak',
+            '<(libchromiumcontent_dir)/ui_resources_200_percent.pak',
+            '<(libchromiumcontent_dir)/views_resources_200_percent.pak',
             '<(libchromiumcontent_dir)/natives_blob.bin',
-            '<(libchromiumcontent_dir)/snapshot_blob.bin',
+            '<(libchromiumcontent_dir)/v8_context_snapshot.bin',
           ],
           'xcode_settings': {
             'ATOM_BUNDLE_ID': 'com.<(company_abbr).<(project_name).framework',

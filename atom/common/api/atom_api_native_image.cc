@@ -85,7 +85,7 @@ bool AddImageSkiaRep(gfx::ImageSkia* image,
                      int width,
                      int height,
                      double scale_factor) {
-  std::unique_ptr<SkBitmap> decoded(new SkBitmap());
+  auto decoded = std::make_unique<SkBitmap>();
 
   // Try PNG first.
   if (!gfx::PNGCodec::Decode(data, size, decoded.get())) {
@@ -245,15 +245,14 @@ HICON NativeImage::GetHICON(int size) {
 
   // First try loading the icon with specified size.
   if (!hicon_path_.empty()) {
-    hicons_[size] = std::move(ReadICOFromPath(size, hicon_path_));
+    hicons_[size] = ReadICOFromPath(size, hicon_path_);
     return hicons_[size].get();
   }
 
   // Then convert the image to ICO.
   if (image_.IsEmpty())
     return NULL;
-  hicons_[size] =
-      std::move(IconUtil::CreateHICONFromSkBitmap(image_.AsBitmap()));
+  hicons_[size] = IconUtil::CreateHICONFromSkBitmap(image_.AsBitmap());
   return hicons_[size].get();
 }
 #endif
@@ -517,9 +516,6 @@ mate::Handle<NativeImage> NativeImage::CreateFromBuffer(
     options.Get("width", &width);
     options.Get("height", &height);
     options.Get("scaleFactor", &scale_factor);
-  } else {
-    // TODO(kevinsawicki): Remove in 2.0, deprecate before then with warnings
-    args->GetNext(&scale_factor);
   }
 
   gfx::ImageSkia image_skia;

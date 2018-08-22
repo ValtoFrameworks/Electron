@@ -143,10 +143,6 @@ bool NativeWindowViews::ExecuteWindowsCommand(int command_id) {
   std::string command = AppCommandToString(command_id);
   NotifyWindowExecuteWindowsCommand(command);
 
-  if (command_id == APPCOMMAND_MEDIA_PLAY_PAUSE)
-    // FIXME(htk3): Remove media-play_pause in 3.0
-    NotifyWindowExecuteWindowsCommand("media-play_pause");
-
   return false;
 }
 
@@ -168,7 +164,7 @@ bool NativeWindowViews::PreHandleMSG(UINT message,
 
       const DWORD obj_id = static_cast<DWORD>(l_param);
 
-      if (obj_id != OBJID_CLIENT) {
+      if (obj_id != static_cast<DWORD>(OBJID_CLIENT)) {
         return false;
       }
 
@@ -178,7 +174,7 @@ bool NativeWindowViews::PreHandleMSG(UINT message,
 
       checked_for_a11y_support_ = true;
 
-      const auto axState = content::BrowserAccessibilityState::GetInstance();
+      auto* const axState = content::BrowserAccessibilityState::GetInstance();
       if (axState && !axState->IsAccessibleBrowser()) {
         axState->OnScreenReaderDetected();
         Browser::Get()->OnAccessibilitySupportChanged();
@@ -191,6 +187,16 @@ bool NativeWindowViews::PreHandleMSG(UINT message,
       if (HIWORD(w_param) == THBN_CLICKED)
         return taskbar_host_.HandleThumbarButtonEvent(LOWORD(w_param));
       return false;
+    case WM_SIZING: {
+      bool prevent_default = false;
+      NotifyWindowWillResize(gfx::Rect(*reinterpret_cast<RECT*>(l_param)),
+                             &prevent_default);
+      if (prevent_default) {
+        ::GetWindowRect(GetAcceleratedWidget(),
+                        reinterpret_cast<RECT*>(l_param));
+      }
+      return false;
+    }
     case WM_SIZE: {
       // Handle window state change.
       HandleSizeEvent(w_param, l_param);
@@ -202,7 +208,8 @@ bool NativeWindowViews::PreHandleMSG(UINT message,
     }
     case WM_MOVING: {
       if (!movable_)
-        ::GetWindowRect(GetAcceleratedWidget(), (LPRECT)l_param);
+        ::GetWindowRect(GetAcceleratedWidget(),
+                        reinterpret_cast<RECT*>(l_param));
       return false;
     }
     case WM_MOVE: {
@@ -282,6 +289,8 @@ void NativeWindowViews::HandleSizeEvent(WPARAM w_param, LPARAM l_param) {
               NotifyWindowRestore();
             }
             break;
+          default:
+            break;
         }
       }
       break;
@@ -354,7 +363,7 @@ LRESULT CALLBACK NativeWindowViews::MouseHookProc(int n_code,
   // the cursor since they are in a state where they would otherwise ignore all
   // mouse input.
   if (w_param == WM_MOUSEMOVE) {
-    for (auto window : forwarding_windows_) {
+    for (auto* window : forwarding_windows_) {
       // At first I considered enumerating windows to check whether the cursor
       // was directly above the window, but since nothing bad seems to happen
       // if we post the message even if some other window occludes it I have

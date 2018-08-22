@@ -188,7 +188,7 @@ bool Archive::Init() {
   std::string error;
   base::JSONReader reader;
   std::unique_ptr<base::Value> value(reader.ReadToValue(header));
-  if (!value || !value->IsType(base::Value::Type::DICTIONARY)) {
+  if (!value || !value->is_dict()) {
     LOG(ERROR) << "Failed to parse header: " << error;
     return false;
   }
@@ -221,13 +221,13 @@ bool Archive::Stat(const base::FilePath& path, Stats* stats) {
   if (!GetNodeFromPath(path.AsUTF8Unsafe(), header_.get(), &node))
     return false;
 
-  if (node->HasKey("link")) {
+  if (node->FindKey("link")) {
     stats->is_file = false;
     stats->is_link = true;
     return true;
   }
 
-  if (node->HasKey("files")) {
+  if (node->FindKey("files")) {
     stats->is_file = false;
     stats->is_directory = true;
     return true;
@@ -291,7 +291,7 @@ bool Archive::CopyFileOut(const base::FilePath& path, base::FilePath* out) {
     return true;
   }
 
-  std::unique_ptr<ScopedTemporaryFile> temp_file(new ScopedTemporaryFile);
+  auto temp_file = std::make_unique<ScopedTemporaryFile>();
   base::FilePath::StringType ext = path.Extension();
   if (!temp_file->InitFromFile(&file_, ext, info.offset, info.size))
     return false;

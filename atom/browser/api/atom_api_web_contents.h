@@ -31,25 +31,26 @@ namespace brightray {
 class InspectableWebContents;
 }
 
-namespace content {
-class ResourceRequestBody;
-}
-
 namespace mate {
 class Arguments;
 class Dictionary;
 }  // namespace mate
 
+namespace network {
+class ResourceRequestBody;
+}
+
 namespace atom {
 
-struct SetSizeParams;
 class AtomBrowserContext;
 class AtomJavaScriptDialogManager;
 class WebContentsZoomController;
 class WebViewGuestDelegate;
+class FrameSubscriber;
 
 #if defined(ENABLE_OSR)
 class OffScreenWebContentsView;
+class OffScreenRenderWidgetHostView;
 #endif
 
 namespace api {
@@ -96,12 +97,9 @@ class WebContents : public mate::TrackableObject<WebContents>,
   static void BuildPrototype(v8::Isolate* isolate,
                              v8::Local<v8::FunctionTemplate> prototype);
 
-  static int64_t GetIDForContents(content::WebContents* web_contents);
-
   // Notifies to destroy any guest web contents before destroying self.
   void DestroyWebContents(bool async);
 
-  int64_t GetID() const;
   int GetProcessID() const;
   base::ProcessId GetOSProcessID() const;
   Type GetType() const;
@@ -141,6 +139,7 @@ class WebContents : public mate::TrackableObject<WebContents>,
   void SetIgnoreMenuShortcuts(bool ignore);
   void SetAudioMuted(bool muted);
   bool IsAudioMuted();
+  bool IsCurrentlyAudible();
   void Print(mate::Arguments* args);
   std::vector<printing::PrinterBasicInfo> GetPrinterList();
   void SetEmbedder(const WebContents* embedder);
@@ -197,8 +196,10 @@ class WebContents : public mate::TrackableObject<WebContents>,
   void CapturePage(mate::Arguments* args);
 
   // Methods for creating <webview>.
-  void SetSize(const SetSizeParams& params);
+  void SetSize(v8::Local<v8::Value>);
   bool IsGuest() const;
+  void AttachToIframe(content::WebContents* embedder_web_contents,
+                      int embedder_frame_id);
 
   // Methods for offscreen rendering
   bool IsOffScreen() const;
@@ -213,9 +214,9 @@ class WebContents : public mate::TrackableObject<WebContents>,
 
   // Methods for zoom handling.
   void SetZoomLevel(double level);
-  double GetZoomLevel();
+  double GetZoomLevel() const;
   void SetZoomFactor(double factor);
-  double GetZoomFactor();
+  double GetZoomFactor() const;
 
   // Callback triggered on permission response.
   void OnEnterFullscreenModeForTab(content::WebContents* source,
@@ -228,14 +229,17 @@ class WebContents : public mate::TrackableObject<WebContents>,
                       const std::string& frame_name,
                       WindowOpenDisposition disposition,
                       const std::vector<std::string>& features,
-                      const scoped_refptr<content::ResourceRequestBody>& body);
+                      const scoped_refptr<network::ResourceRequestBody>& body);
+
+  // Returns the preload script path of current WebContents.
+  v8::Local<v8::Value> GetPreloadPath(v8::Isolate* isolate) const;
 
   // Returns the web preferences of current WebContents.
-  v8::Local<v8::Value> GetWebPreferences(v8::Isolate* isolate);
-  v8::Local<v8::Value> GetLastWebPreferences(v8::Isolate* isolate);
+  v8::Local<v8::Value> GetWebPreferences(v8::Isolate* isolate) const;
+  v8::Local<v8::Value> GetLastWebPreferences(v8::Isolate* isolate) const;
 
   // Returns the owner window.
-  v8::Local<v8::Value> GetOwnerBrowserWindow();
+  v8::Local<v8::Value> GetOwnerBrowserWindow() const;
 
   // Grants the child process the capability to access URLs with the origin of
   // the specified URL.
@@ -310,8 +314,10 @@ class WebContents : public mate::TrackableObject<WebContents>,
   void ExitFullscreenModeForTab(content::WebContents* source) override;
   void RendererUnresponsive(
       content::WebContents* source,
-      const content::WebContentsUnresponsiveState& unresponsive_state) override;
-  void RendererResponsive(content::WebContents* source) override;
+      content::RenderWidgetHost* render_widget_host) override;
+  void RendererResponsive(
+      content::WebContents* source,
+      content::RenderWidgetHost* render_widget_host) override;
   bool HandleContextMenu(const content::ContextMenuParams& params) override;
   bool OnGoToEntryOffset(int offset) override;
   void FindReply(content::WebContents* web_contents,
@@ -351,10 +357,6 @@ class WebContents : public mate::TrackableObject<WebContents>,
                    const base::string16& error_description) override;
   void DidStartLoading() override;
   void DidStopLoading() override;
-  void DidGetResourceResponseStart(
-      const content::ResourceRequestDetails& details) override;
-  void DidGetRedirectForResourceRequest(
-      const content::ResourceRedirectDetails& details) override;
   void DidStartNavigation(
       content::NavigationHandle* navigation_handle) override;
   void DidFinishNavigation(
@@ -372,8 +374,10 @@ class WebContents : public mate::TrackableObject<WebContents>,
                      base::ProcessId plugin_pid) override;
   void MediaStartedPlaying(const MediaPlayerInfo& video_type,
                            const MediaPlayerId& id) override;
-  void MediaStoppedPlaying(const MediaPlayerInfo& video_type,
-                           const MediaPlayerId& id) override;
+  void MediaStoppedPlaying(
+      const MediaPlayerInfo& video_type,
+      const MediaPlayerId& id,
+      content::WebContentsObserver::MediaStoppedReason reason) override;
   void DidChangeThemeColor(SkColor theme_color) override;
 
   // brightray::InspectableWebContentsDelegate:
@@ -399,6 +403,7 @@ class WebContents : public mate::TrackableObject<WebContents>,
 
 #if defined(ENABLE_OSR)
   OffScreenWebContentsView* GetOffScreenWebContentsView() const;
+  OffScreenRenderWidgetHostView* GetOffScreenRenderWidgetHostView() const;
 #endif
 
   // Called when we receive a CursorChange message from chromium.
@@ -435,6 +440,8 @@ class WebContents : public mate::TrackableObject<WebContents>,
 
   std::unique_ptr<AtomJavaScriptDialogManager> dialog_manager_;
   std::unique_ptr<WebViewGuestDelegate> guest_delegate_;
+
+  std::unique_ptr<FrameSubscriber> frame_subscriber_;
 
   // The host webcontents that may contain this webcontents.
   WebContents* embedder_ = nullptr;

@@ -287,7 +287,7 @@ It creates a new `BrowserWindow` with native properties as set by the `options`.
       between the web pages even when you specified different values for them,
       including but not limited to `preload`, `sandbox` and `nodeIntegration`.
       So it is suggested to use exact same `webPreferences` for web pages with
-      the same `affinity`.
+      the same `affinity`. _This property is experimental_
     * `zoomFactor` Number (optional) - The default zoom factor of the page, `3.0` represents
       `300%`. Default is `1.0`.
     * `javascript` Boolean (optional) - Enables JavaScript support. Default is `true`.
@@ -305,11 +305,9 @@ It creates a new `BrowserWindow` with native properties as set by the `options`.
     * `plugins` Boolean (optional) - Whether plugins should be enabled. Default is `false`.
     * `experimentalFeatures` Boolean (optional) - Enables Chromium's experimental features.
       Default is `false`.
-    * `experimentalCanvasFeatures` Boolean (optional) - Enables Chromium's experimental
-      canvas features. Default is `false`.
     * `scrollBounce` Boolean (optional) - Enables scroll bounce (rubber banding) effect on
       macOS. Default is `false`.
-    * `blinkFeatures` String (optional) - A list of feature strings separated by `,`, like
+    * `enableBlinkFeatures` String (optional) - A list of feature strings separated by `,`, like
       `CSSVariables,KeyboardEventKey` to enable. The full list of supported feature
       strings can be found in the [RuntimeEnabledFeatures.json5][runtime-enabled-features]
       file.
@@ -492,9 +490,20 @@ Emitted when the window is minimized.
 
 Emitted when the window is restored from a minimized state.
 
+#### Event: 'will-resize' _macOS_ _Windows_
+
+Returns:
+
+* `event` Event
+* `newBounds` [`Rectangle`](structures/rectangle.md) - Size the window is being resized to.
+
+Emitted before the window is resized. Calling `event.preventDefault()` will prevent the window from being resized.
+
+Note that this is only emitted when the window is being resized manually. Resizing the window with `setBounds`/`setSize` will not emit this event.
+
 #### Event: 'resize'
 
-Emitted when the window is being resized.
+Emitted after the window has been resized.
 
 #### Event: 'move'
 
@@ -828,6 +837,9 @@ the player itself we would call this function with arguments of 16/9 and
 are within the content view--only that they exist. Sum any extra width and
 height areas you have within the overall content view.
 
+Calling this function with a value of `0` will remove any previously set aspect
+ratios.
+
 #### `win.previewFile(path[, displayName])` _macOS_
 
 * `path` String - The absolute path to the file to preview with QuickLook. This
@@ -1153,7 +1165,7 @@ Same as `webContents.capturePage([rect, ]callback)`.
   * `httpReferrer` (String | [Referrer](structures/referrer.md)) (optional) - An HTTP Referrer url.
   * `userAgent` String (optional) - A user agent originating the request.
   * `extraHeaders` String (optional) - Extra headers separated by "\n"
-  * `postData` ([UploadRawData[]](structures/upload-raw-data.md) | [UploadFile[]](structures/upload-file.md) | [UploadFileSystem[]](structures/upload-file-system.md) | [UploadBlob[]](structures/upload-blob.md)) (optional)
+  * `postData` ([UploadRawData[]](structures/upload-raw-data.md) | [UploadFile[]](structures/upload-file.md) | [UploadBlob[]](structures/upload-blob.md)) (optional)
   * `baseURLForDataURL` String (optional) - Base url (with trailing path separator) for files to be loaded by the data url. This is needed only if the specified `url` is a data url and needs to load other files.
 
 Same as `webContents.loadURL(url[, options])`.
@@ -1228,7 +1240,7 @@ mode set (but with a value within the valid range), `normal` will be assumed.
 
 #### `win.setOverlayIcon(overlay, description)` _Windows_
 
-* `overlay` [NativeImage](native-image.md) - the icon to display on the bottom
+* `overlay` [NativeImage](native-image.md) | null - the icon to display on the bottom
 right corner of the taskbar icon. If this parameter is `null`, the overlay is
 cleared
 * `description` String - a description that will be provided to Accessibility
@@ -1260,6 +1272,17 @@ Sets the opacity of the window. On Linux does nothing.
 #### `win.getOpacity()` _Windows_ _macOS_
 
 Returns `Number` - between 0.0 (fully transparent) and 1.0 (fully opaque)
+
+#### `win.setShape(rects)` _Windows_ _Linux_ _Experimental_
+
+* `rects` [Rectangle[]](structures/rectangle.md) - Sets a shape on the window.
+  Passing an empty list reverts the window to being rectangular.
+
+Setting a window shape determines the area within the window where the system
+permits drawing and user interaction. Outside of the given region, no pixels
+will be drawn and no mouse events will be registered. Mouse events outside of
+the region will not be received by that window, but will fall through to
+whatever is behind the window.
 
 #### `win.setThumbarButtons(buttons)` _Windows_
 
@@ -1340,6 +1363,14 @@ Same as `webContents.showDefinitionForSelection()`.
 * `icon` [NativeImage](native-image.md)
 
 Changes window icon.
+
+#### `win.setWindowButtonVisibility(visible)` _macOS_
+
+* `visible` Boolean
+
+Sets whether the window traffic light buttons should be visible.
+
+This cannot be called when `titleBarStyle` is set to `customButtonsOnHover`.
 
 #### `win.setAutoHideMenuBar(hide)`
 

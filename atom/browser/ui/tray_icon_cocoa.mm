@@ -403,6 +403,11 @@ const CGFloat kVerticalTitleMargin = 2;
   return YES;
 }
 
+- (void)setNeedsDisplay:(BOOL)display {
+  [self updateAttributedTitle];
+  [super setNeedsDisplay:display];
+}
+
 - (BOOL)shouldHighlight {
   switch (highlight_mode_) {
     case atom::TrayIcon::HighlightMode::ALWAYS:
@@ -479,10 +484,6 @@ void TrayIconCocoa::SetContextMenu(AtomMenuModel* menu_model) {
 
 gfx::Rect TrayIconCocoa::GetBounds() {
   auto bounds = gfx::ScreenRectFromNSRect([status_item_view_ window].frame);
-  // Calling [window frame] immediately after the view gets created will have
-  // negative |y| sometimes.
-  if (bounds.y() < 0)
-    bounds.set_y(0);
   return bounds;
 }
 

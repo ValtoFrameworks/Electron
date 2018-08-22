@@ -4,8 +4,8 @@ Follow the guidelines below for building Electron on Windows.
 
 ## Prerequisites
 
-* Windows 7 / Server 2008 R2 or higher
-* Visual Studio 2017 - [download VS 2017 Community Edition for
+* Windows 10 / Server 2012 R2 or higher
+* Visual Studio 2017 15.7.2 or higher - [download VS 2017 Community Edition for
   free](https://www.visualstudio.com/vs/)
 * [Python 2.7](http://www.python.org/download/releases/2.7/)
 * [Node.js](https://nodejs.org/download/)
@@ -37,23 +37,36 @@ The bootstrap script will download all necessary build dependencies and create
 the build project files. Notice that we're using `ninja` to build Electron so
 there is no Visual Studio project generated.
 
+To bootstrap for a static, non-developer build, run:
+
 ```powershell
 $ cd electron
-$ python script\bootstrap.py -v
+$ npm run bootstrap
+```
+
+Or to bootstrap for a development session that builds faster by not statically linking:
+
+```powershell
+$ cd electron
+$ npm run bootstrap:dev
 ```
 
 ## Building
 
-Build both Release and Debug targets:
+Build both `Release` and `Debug` targets:
 
 ```powershell
-$ python script\build.py
+$ npm run build
 ```
 
-You can also only build the Debug target:
+You can also build either the `Debug` or `Release` target on its own:
 
 ```powershell
-$ python script\build.py -c D
+$ npm run build:dev
+```
+
+```powershell
+$ npm run build:release
 ```
 
 After building is done, you can find `electron.exe` under `out\D` (debug
@@ -153,3 +166,11 @@ $ mkdir ~\AppData\Roaming\npm
 
 You may get this error if you are using Git Bash for building, you should use
 PowerShell or VS2015 Command Prompt instead.
+
+### cannot create directory at '...': Filename too long
+
+node.js has some [extremely long pathnames](https://github.com/electron/node/tree/electron/deps/npm/node_modules/libnpx/node_modules/yargs/node_modules/read-pkg-up/node_modules/read-pkg/node_modules/load-json-file/node_modules/parse-json/node_modules/error-ex/node_modules/is-arrayish), and by default git on windows doesn't handle long pathnames correctly (even though windows supports them). This should fix it:
+
+```sh
+$ git config --system core.longpaths true
+```

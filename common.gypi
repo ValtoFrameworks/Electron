@@ -14,12 +14,13 @@
     'debug_http2': 'false',
     'debug_nghttp2': 'false',
     # XXX(alexeykuzmin): Must match the clang version we use. See `clang -v`.
-    'llvm_version': '6.0',
+    'llvm_version': '7.0',
     'python': 'python',
     'openssl_fips': '',
     'openssl_no_asm': 1,
     'use_openssl_def': 0,
     'openssl_product': 'libopenssl.a',
+    'node_debug_lib': 'false',
     'node_release_urlbase': 'https://atom.io/download/electron',
     'node_byteorder': '<!(node <(DEPTH)/tools/get-endianness.js)',
     'node_target_type': 'shared_library',
@@ -154,6 +155,7 @@
           'BUILDING_V8_SHARED',
           'BUILDING_V8_PLATFORM_SHARED',
           'BUILDING_V8_BASE_SHARED',
+          'NODE_WITHOUT_NODE_OPTIONS',
         ],
         'conditions': [
           ['OS=="mac" and libchromiumcontent_component==0', {

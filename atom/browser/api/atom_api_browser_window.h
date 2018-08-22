@@ -49,7 +49,7 @@ class BrowserWindow : public TopLevelWindow,
   void RenderViewCreated(content::RenderViewHost* render_view_host) override;
   void DidFirstVisuallyNonEmptyPaint() override;
   void BeforeUnloadDialogCancelled() override;
-  void OnRendererUnresponsive(content::RenderWidgetHost*) override;
+  void OnRendererUnresponsive(content::RenderProcessHost*) override;
   bool OnMessageReceived(const IPC::Message& message,
                          content::RenderFrameHost* rfh) override;
 
@@ -66,11 +66,12 @@ class BrowserWindow : public TopLevelWindow,
   void OnWindowBlur() override;
   void OnWindowFocus() override;
   void OnWindowResize() override;
+  void OnWindowLeaveFullScreen() override;
   void Focus() override;
   void Blur() override;
   void SetBackgroundColor(const std::string& color_name) override;
   void SetBrowserView(v8::Local<v8::Value> value) override;
-  void SetVibrancy(mate::Arguments* args) override;
+  void SetVibrancy(v8::Isolate* isolate, v8::Local<v8::Value> value) override;
 
   // BrowserWindow APIs.
   void FocusOnWebView();
@@ -79,6 +80,10 @@ class BrowserWindow : public TopLevelWindow,
   v8::Local<v8::Value> GetWebContents(v8::Isolate* isolate);
 
  private:
+#if defined(OS_MACOSX)
+  void OverrideNSWindowContentView(brightray::InspectableWebContents* iwc);
+#endif
+
   // Helpers.
 
   // Called when the window needs to update its draggable region.

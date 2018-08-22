@@ -70,11 +70,8 @@ scoped_refptr<AtomURLRequest> AtomURLRequest::Create(
     return nullptr;
   }
   scoped_refptr<brightray::URLRequestContextGetter> request_context_getter(
-      browser_context->url_request_context_getter());
+      browser_context->GetRequestContext());
   DCHECK(request_context_getter);
-  if (!request_context_getter) {
-    return nullptr;
-  }
   scoped_refptr<AtomURLRequest> atom_url_request(new AtomURLRequest(delegate));
   if (content::BrowserThread::PostTask(
           content::BrowserThread::IO, FROM_HERE,
@@ -354,7 +351,8 @@ void AtomURLRequest::OnAuthRequired(net::URLRequest* request,
                      this, scoped_refptr<net::AuthChallengeInfo>(auth_info)));
 }
 
-void AtomURLRequest::OnResponseStarted(net::URLRequest* request) {
+void AtomURLRequest::OnResponseStarted(net::URLRequest* request,
+                                       int net_error) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
   if (!request_) {
     return;
@@ -373,7 +371,7 @@ void AtomURLRequest::OnResponseStarted(net::URLRequest* request) {
     ReadResponse();
   } else if (status.status() == net::URLRequestStatus::Status::FAILED) {
     // Report error on Start.
-    DoCancelWithError(net::ErrorToString(status.ToNetError()), true);
+    DoCancelWithError(net::ErrorToString(net_error), true);
   }
   // We don't report an error is the request is canceled.
 }
@@ -501,6 +499,18 @@ void AtomURLRequest::InformDelegateErrorOccured(const std::string& error,
 
   if (delegate_)
     delegate_->OnError(error, isRequestError);
+}
+
+void AtomURLRequest::GetUploadProgress(mate::Dictionary* progress) const {
+  net::UploadProgress upload_progress;
+  if (request_) {
+    progress->Set("started", true);
+    upload_progress = request_->GetUploadProgress();
+  } else {
+    progress->Set("started", false);
+  }
+  progress->Set("current", upload_progress.position());
+  progress->Set("total", upload_progress.size());
 }
 
 }  // namespace atom

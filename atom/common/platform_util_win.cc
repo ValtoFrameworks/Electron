@@ -13,6 +13,7 @@
 #include <objbase.h>
 #include <shellapi.h>
 #include <shlobj.h>
+#include <wrl/client.h>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
@@ -24,28 +25,11 @@
 #include "base/win/registry.h"
 #include "base/win/scoped_co_mem.h"
 #include "base/win/scoped_com_initializer.h"
-#include "base/win/scoped_comptr.h"
 #include "base/win/windows_version.h"
 #include "ui/base/win/shell.h"
 #include "url/gurl.h"
 
 namespace {
-
-// Old ShellExecute crashes the process when the command for a given scheme
-// is empty. This function tells if it is.
-bool ValidateShellCommandForScheme(const std::string& scheme) {
-  base::win::RegKey key;
-  base::string16 registry_path =
-      base::ASCIIToUTF16(scheme) + L"\\shell\\open\\command";
-  key.Open(HKEY_CLASSES_ROOT, registry_path.c_str(), KEY_READ);
-  if (!key.Valid())
-    return false;
-  DWORD size = 0;
-  key.ReadValue(NULL, NULL, &size, NULL);
-  if (size <= 2)
-    return false;
-  return true;
-}
 
 // Required COM implementation of IFileOperationProgressSink so we can
 // precheck files before deletion to make sure they can be move to the
@@ -53,45 +37,55 @@ bool ValidateShellCommandForScheme(const std::string& scheme) {
 class DeleteFileProgressSink : public IFileOperationProgressSink {
  public:
   DeleteFileProgressSink();
+  virtual ~DeleteFileProgressSink() = default;
 
  private:
-  ULONG STDMETHODCALLTYPE AddRef(void);
-  ULONG STDMETHODCALLTYPE Release(void);
-  HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, LPVOID* ppvObj);
-  HRESULT STDMETHODCALLTYPE StartOperations(void);
-  HRESULT STDMETHODCALLTYPE FinishOperations(HRESULT);
-  HRESULT STDMETHODCALLTYPE PreRenameItem(DWORD, IShellItem*, LPCWSTR);
+  ULONG STDMETHODCALLTYPE AddRef(void) override;
+  ULONG STDMETHODCALLTYPE Release(void) override;
+  HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid,
+                                           LPVOID* ppvObj) override;
+  HRESULT STDMETHODCALLTYPE StartOperations(void) override;
+  HRESULT STDMETHODCALLTYPE FinishOperations(HRESULT) override;
+  HRESULT STDMETHODCALLTYPE PreRenameItem(DWORD, IShellItem*, LPCWSTR) override;
   HRESULT STDMETHODCALLTYPE
-  PostRenameItem(DWORD, IShellItem*, LPCWSTR, HRESULT, IShellItem*);
+  PostRenameItem(DWORD, IShellItem*, LPCWSTR, HRESULT, IShellItem*) override;
   HRESULT STDMETHODCALLTYPE PreMoveItem(DWORD,
                                         IShellItem*,
                                         IShellItem*,
-                                        LPCWSTR);
-  HRESULT STDMETHODCALLTYPE
-  PostMoveItem(DWORD, IShellItem*, IShellItem*, LPCWSTR, HRESULT, IShellItem*);
+                                        LPCWSTR) override;
+  HRESULT STDMETHODCALLTYPE PostMoveItem(DWORD,
+                                         IShellItem*,
+                                         IShellItem*,
+                                         LPCWSTR,
+                                         HRESULT,
+                                         IShellItem*) override;
   HRESULT STDMETHODCALLTYPE PreCopyItem(DWORD,
                                         IShellItem*,
                                         IShellItem*,
-                                        LPCWSTR);
-  HRESULT STDMETHODCALLTYPE
-  PostCopyItem(DWORD, IShellItem*, IShellItem*, LPCWSTR, HRESULT, IShellItem*);
-  HRESULT STDMETHODCALLTYPE PreDeleteItem(DWORD, IShellItem*);
+                                        LPCWSTR) override;
+  HRESULT STDMETHODCALLTYPE PostCopyItem(DWORD,
+                                         IShellItem*,
+                                         IShellItem*,
+                                         LPCWSTR,
+                                         HRESULT,
+                                         IShellItem*) override;
+  HRESULT STDMETHODCALLTYPE PreDeleteItem(DWORD, IShellItem*) override;
   HRESULT STDMETHODCALLTYPE PostDeleteItem(DWORD,
                                            IShellItem*,
                                            HRESULT,
-                                           IShellItem*);
-  HRESULT STDMETHODCALLTYPE PreNewItem(DWORD, IShellItem*, LPCWSTR);
+                                           IShellItem*) override;
+  HRESULT STDMETHODCALLTYPE PreNewItem(DWORD, IShellItem*, LPCWSTR) override;
   HRESULT STDMETHODCALLTYPE PostNewItem(DWORD,
                                         IShellItem*,
                                         LPCWSTR,
                                         LPCWSTR,
                                         DWORD,
                                         HRESULT,
-                                        IShellItem*);
-  HRESULT STDMETHODCALLTYPE UpdateProgress(UINT, UINT);
-  HRESULT STDMETHODCALLTYPE ResetTimer(void);
-  HRESULT STDMETHODCALLTYPE PauseTimer(void);
-  HRESULT STDMETHODCALLTYPE ResumeTimer(void);
+                                        IShellItem*) override;
+  HRESULT STDMETHODCALLTYPE UpdateProgress(UINT, UINT) override;
+  HRESULT STDMETHODCALLTYPE ResetTimer(void) override;
+  HRESULT STDMETHODCALLTYPE PauseTimer(void) override;
+  HRESULT STDMETHODCALLTYPE ResumeTimer(void) override;
 
   ULONG m_cRef;
 };
@@ -238,7 +232,7 @@ namespace platform_util {
 
 bool ShowItemInFolder(const base::FilePath& full_path) {
   base::win::ScopedCOMInitializer com_initializer;
-  if (!com_initializer.succeeded())
+  if (!com_initializer.Succeeded())
     return false;
 
   base::FilePath dir = full_path.DirName().AsEndingWithSeparator();
@@ -246,34 +240,7 @@ bool ShowItemInFolder(const base::FilePath& full_path) {
   if (dir.empty())
     return false;
 
-  typedef HRESULT(WINAPI * SHOpenFolderAndSelectItemsFuncPtr)(
-      PCIDLIST_ABSOLUTE pidl_Folder, UINT cidl, PCUITEMID_CHILD_ARRAY pidls,
-      DWORD flags);
-
-  static SHOpenFolderAndSelectItemsFuncPtr open_folder_and_select_itemsPtr =
-      NULL;
-  static bool initialize_open_folder_proc = true;
-  if (initialize_open_folder_proc) {
-    initialize_open_folder_proc = false;
-    // The SHOpenFolderAndSelectItems API is exposed by shell32 version 6
-    // and does not exist in Win2K. We attempt to retrieve this function export
-    // from shell32 and if it does not exist, we just invoke ShellExecute to
-    // open the folder thus losing the functionality to select the item in
-    // the process.
-    HMODULE shell32_base = GetModuleHandle(L"shell32.dll");
-    if (!shell32_base) {
-      NOTREACHED() << " " << __FUNCTION__ << "(): Can't open shell32.dll";
-      return false;
-    }
-    open_folder_and_select_itemsPtr =
-        reinterpret_cast<SHOpenFolderAndSelectItemsFuncPtr>(
-            GetProcAddress(shell32_base, "SHOpenFolderAndSelectItems"));
-  }
-  if (!open_folder_and_select_itemsPtr) {
-    return ui::win::OpenFolderViaShell(dir);
-  }
-
-  base::win::ScopedComPtr<IShellFolder> desktop;
+  Microsoft::WRL::ComPtr<IShellFolder> desktop;
   HRESULT hr = SHGetDesktopFolder(desktop.GetAddressOf());
   if (FAILED(hr))
     return false;
@@ -296,8 +263,8 @@ bool ShowItemInFolder(const base::FilePath& full_path) {
 
   const ITEMIDLIST* highlight[] = {file_item};
 
-  hr = (*open_folder_and_select_itemsPtr)(dir_item, arraysize(highlight),
-                                          highlight, NULL);
+  hr = SHOpenFolderAndSelectItems(dir_item, arraysize(highlight), highlight,
+                                  NULL);
   if (!FAILED(hr))
     return true;
 
@@ -308,9 +275,8 @@ bool ShowItemInFolder(const base::FilePath& full_path) {
     return ui::win::OpenFolderViaShell(dir);
   } else {
     LPTSTR message = NULL;
-    DWORD message_length = FormatMessage(
-        FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM, 0, hr, 0,
-        reinterpret_cast<LPTSTR>(&message), 0, NULL);
+    FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM,
+                  0, hr, 0, reinterpret_cast<LPTSTR>(&message), 0, NULL);
     LOG(WARNING) << " " << __FUNCTION__ << "(): Can't open full_path = \""
                  << full_path.value() << "\""
                  << " hr = " << hr << " " << reinterpret_cast<LPTSTR>(&message);
@@ -354,10 +320,10 @@ void OpenExternal(const base::string16& url,
 
 bool MoveItemToTrash(const base::FilePath& path) {
   base::win::ScopedCOMInitializer com_initializer;
-  if (!com_initializer.succeeded())
+  if (!com_initializer.Succeeded())
     return false;
 
-  base::win::ScopedComPtr<IFileOperation> pfo;
+  Microsoft::WRL::ComPtr<IFileOperation> pfo;
   if (FAILED(::CoCreateInstance(CLSID_FileOperation, nullptr, CLSCTX_ALL,
                                 IID_PPV_ARGS(&pfo))))
     return false;
@@ -381,13 +347,13 @@ bool MoveItemToTrash(const base::FilePath& path) {
   }
 
   // Create an IShellItem from the supplied source path.
-  base::win::ScopedComPtr<IShellItem> delete_item;
+  Microsoft::WRL::ComPtr<IShellItem> delete_item;
   if (FAILED(SHCreateItemFromParsingName(
           path.value().c_str(), NULL,
           IID_PPV_ARGS(delete_item.GetAddressOf()))))
     return false;
 
-  base::win::ScopedComPtr<IFileOperationProgressSink> delete_sink(
+  Microsoft::WRL::ComPtr<IFileOperationProgressSink> delete_sink(
       new DeleteFileProgressSink);
   if (!delete_sink)
     return false;
