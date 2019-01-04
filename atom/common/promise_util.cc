@@ -11,9 +11,10 @@ namespace atom {
 namespace util {
 
 Promise::Promise(v8::Isolate* isolate) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  auto context = isolate->GetCurrentContext();
+  auto resolver = v8::Promise::Resolver::New(context).ToLocalChecked();
   isolate_ = isolate;
-  resolver_.Reset(isolate, v8::Promise::Resolver::New(isolate));
+  resolver_.Reset(isolate, resolver);
 }
 
 Promise::~Promise() = default;
@@ -22,11 +23,10 @@ v8::Maybe<bool> Promise::RejectWithErrorMessage(const std::string& string) {
   v8::Local<v8::String> error_message =
       v8::String::NewFromUtf8(isolate(), string.c_str());
   v8::Local<v8::Value> error = v8::Exception::Error(error_message);
-  return GetInner()->Reject(isolate()->GetCurrentContext(),
-                            mate::ConvertToV8(isolate(), error));
+  return Reject(error);
 }
 
-v8::Local<v8::Object> Promise::GetHandle() const {
+v8::Local<v8::Promise> Promise::GetHandle() const {
   return GetInner()->GetPromise();
 }
 

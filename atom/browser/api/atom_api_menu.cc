@@ -41,6 +41,8 @@ void Menu::AfterInit(v8::Isolate* isolate) {
   delegate.Get("isCommandIdEnabled", &is_enabled_);
   delegate.Get("isCommandIdVisible", &is_visible_);
   delegate.Get("getAcceleratorForCommandId", &get_accelerator_);
+  delegate.Get("shouldRegisterAcceleratorForCommandId",
+               &should_register_accelerator_);
   delegate.Get("executeCommand", &execute_command_);
   delegate.Get("menuWillShow", &menu_will_show_);
 }
@@ -74,6 +76,12 @@ bool Menu::GetAcceleratorForCommandIdWithParams(
   return mate::ConvertFromV8(isolate(), val, accelerator);
 }
 
+bool Menu::ShouldRegisterAcceleratorForCommandId(int command_id) const {
+  v8::Locker locker(isolate());
+  v8::HandleScope handle_scope(isolate());
+  return should_register_accelerator_.Run(GetWrapper(), command_id);
+}
+
 void Menu::ExecuteCommand(int command_id, int flags) {
   v8::Locker locker(isolate());
   v8::HandleScope handle_scope(isolate());
@@ -82,7 +90,7 @@ void Menu::ExecuteCommand(int command_id, int flags) {
                        command_id);
 }
 
-void Menu::MenuWillShow(ui::SimpleMenuModel* source) {
+void Menu::OnMenuWillShow(ui::SimpleMenuModel* source) {
   v8::Locker locker(isolate());
   v8::HandleScope handle_scope(isolate());
   menu_will_show_.Run(GetWrapper());
@@ -155,6 +163,12 @@ base::string16 Menu::GetSublabelAt(int index) const {
   return model_->GetSublabelAt(index);
 }
 
+base::string16 Menu::GetAcceleratorTextAt(int index) const {
+  ui::Accelerator accelerator;
+  model_->GetAcceleratorAtWithParams(index, true, &accelerator);
+  return accelerator.GetShortcutText();
+}
+
 bool Menu::IsItemCheckedAt(int index) const {
   return model_->IsItemCheckedAt(index);
 }
@@ -195,6 +209,7 @@ void Menu::BuildPrototype(v8::Isolate* isolate,
       .SetMethod("getCommandIdAt", &Menu::GetCommandIdAt)
       .SetMethod("getLabelAt", &Menu::GetLabelAt)
       .SetMethod("getSublabelAt", &Menu::GetSublabelAt)
+      .SetMethod("getAcceleratorTextAt", &Menu::GetAcceleratorTextAt)
       .SetMethod("isItemCheckedAt", &Menu::IsItemCheckedAt)
       .SetMethod("isEnabledAt", &Menu::IsEnabledAt)
       .SetMethod("isVisibleAt", &Menu::IsVisibleAt)

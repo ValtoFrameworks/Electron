@@ -7,7 +7,9 @@
 
 #import <Cocoa/Cocoa.h>
 
+#include <memory>
 #include <string>
+#include <tuple>
 #include <vector>
 
 #include "atom/browser/native_window.h"
@@ -52,6 +54,8 @@ class NativeWindowMac : public NativeWindow {
   bool IsFullscreen() const override;
   void SetBounds(const gfx::Rect& bounds, bool animate = false) override;
   gfx::Rect GetBounds() override;
+  bool IsNormal() override;
+  gfx::Rect GetNormalBounds() override;
   void SetContentSizeConstraints(
       const extensions::SizeConstraints& size_constraints) override;
   void SetResizable(bool resizable) override;
@@ -98,16 +102,19 @@ class NativeWindowMac : public NativeWindow {
   bool IsDocumentEdited() override;
   void SetIgnoreMouseEvents(bool ignore, bool forward) override;
   void SetContentProtection(bool enable) override;
-  void SetBrowserView(NativeBrowserView* browser_view) override;
+  void AddBrowserView(NativeBrowserView* browser_view) override;
+  void RemoveBrowserView(NativeBrowserView* browser_view) override;
   void SetParentWindow(NativeWindow* parent) override;
   gfx::NativeView GetNativeView() const override;
   gfx::NativeWindow GetNativeWindow() const override;
   gfx::AcceleratedWidget GetAcceleratedWidget() const override;
+  NativeWindowHandle GetNativeWindowHandle() const override;
   void SetProgressBar(double progress, const ProgressState state) override;
   void SetOverlayIcon(const gfx::Image& overlay,
                       const std::string& description) override;
 
-  void SetVisibleOnAllWorkspaces(bool visible) override;
+  void SetVisibleOnAllWorkspaces(bool visible,
+                                 bool visibleOnFullScreen) override;
   bool IsVisibleOnAllWorkspaces() override;
 
   void SetAutoHideCursor(bool auto_hide) override;
@@ -205,6 +212,7 @@ class NativeWindowMac : public NativeWindow {
   bool was_maximizable_ = false;
   bool was_movable_ = false;
   NSRect original_frame_;
+  NSInteger original_level_;
   NSUInteger simple_fullscreen_mask_;
 
   base::scoped_nsobject<NSColor> background_color_before_vibrancy_;

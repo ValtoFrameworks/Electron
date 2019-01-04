@@ -10,7 +10,7 @@
 #include "atom/common/node_includes.h"
 #include "content/public/renderer/render_frame.h"
 #include "native_mate/dictionary.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
+#include "third_party/blink/public/web/web_local_frame.h"
 
 using blink::WebLocalFrame;
 using content::RenderFrame;
@@ -28,7 +28,7 @@ RenderFrame* GetCurrentRenderFrame() {
 }
 
 void Send(mate::Arguments* args,
-          const base::string16& channel,
+          const std::string& channel,
           const base::ListValue& arguments) {
   RenderFrame* render_frame = GetCurrentRenderFrame();
   if (render_frame == nullptr)
@@ -42,7 +42,7 @@ void Send(mate::Arguments* args,
 }
 
 base::ListValue SendSync(mate::Arguments* args,
-                         const base::string16& channel,
+                         const std::string& channel,
                          const base::ListValue& arguments) {
   base::ListValue result;
 
@@ -60,17 +60,40 @@ base::ListValue SendSync(mate::Arguments* args,
   return result;
 }
 
-void Initialize(v8::Local<v8::Object> exports,
-                v8::Local<v8::Value> unused,
-                v8::Local<v8::Context> context,
-                void* priv) {
-  mate::Dictionary dict(context->GetIsolate(), exports);
-  dict.SetMethod("send", &Send);
-  dict.SetMethod("sendSync", &SendSync);
+void SendTo(mate::Arguments* args,
+            bool internal,
+            bool send_to_all,
+            int32_t web_contents_id,
+            const std::string& channel,
+            const base::ListValue& arguments) {
+  RenderFrame* render_frame = GetCurrentRenderFrame();
+  if (render_frame == nullptr)
+    return;
+
+  bool success = render_frame->Send(new AtomFrameHostMsg_Message_To(
+      render_frame->GetRoutingID(), internal, send_to_all, web_contents_id,
+      channel, arguments));
+
+  if (!success)
+    args->ThrowError("Unable to send AtomFrameHostMsg_Message_To");
 }
 
 }  // namespace api
 
 }  // namespace atom
 
-NODE_BUILTIN_MODULE_CONTEXT_AWARE(atom_renderer_ipc, atom::api::Initialize)
+namespace {
+
+void Initialize(v8::Local<v8::Object> exports,
+                v8::Local<v8::Value> unused,
+                v8::Local<v8::Context> context,
+                void* priv) {
+  mate::Dictionary dict(context->GetIsolate(), exports);
+  dict.SetMethod("send", &atom::api::Send);
+  dict.SetMethod("sendSync", &atom::api::SendSync);
+  dict.SetMethod("sendTo", &atom::api::SendTo);
+}
+
+}  // namespace
+
+NODE_BUILTIN_MODULE_CONTEXT_AWARE(atom_renderer_ipc, Initialize)

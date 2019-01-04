@@ -1,14 +1,12 @@
 config("native_mate_config") {
   include_dirs = [ "." ]
-  cflags_cc = [ "-Wno-deprecated-declarations" ]
-  cflags_objcc = cflags_cc
 }
 
 source_set("native_mate") {
   deps = [
-    "//third_party/electron_node:node_lib",
     "//base",
     "//net",
+    "//third_party/electron_node:node_lib",
     "//v8:v8_headers",
   ]
   public_configs = [ ":native_mate_config" ]

@@ -18,17 +18,18 @@
 #include "content/public/renderer/render_view.h"
 #include "native_mate/dictionary.h"
 #include "native_mate/object_template_builder.h"
-#include "third_party/WebKit/Source/platform/weborigin/SchemeRegistry.h"
-#include "third_party/WebKit/public/platform/WebCache.h"
-#include "third_party/WebKit/public/web/WebDocument.h"
-#include "third_party/WebKit/public/web/WebElement.h"
-#include "third_party/WebKit/public/web/WebFrameWidget.h"
-#include "third_party/WebKit/public/web/WebImeTextSpan.h"
-#include "third_party/WebKit/public/web/WebInputMethodController.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
-#include "third_party/WebKit/public/web/WebScriptExecutionCallback.h"
-#include "third_party/WebKit/public/web/WebScriptSource.h"
-#include "third_party/WebKit/public/web/WebView.h"
+#include "third_party/blink/public/platform/web_cache.h"
+#include "third_party/blink/public/web/web_document.h"
+#include "third_party/blink/public/web/web_element.h"
+#include "third_party/blink/public/web/web_frame_widget.h"
+#include "third_party/blink/public/web/web_ime_text_span.h"
+#include "third_party/blink/public/web/web_input_method_controller.h"
+#include "third_party/blink/public/web/web_local_frame.h"
+#include "third_party/blink/public/web/web_script_execution_callback.h"
+#include "third_party/blink/public/web/web_script_source.h"
+#include "third_party/blink/public/web/web_view.h"
+#include "third_party/blink/renderer/platform/weborigin/scheme_registry.h"
+#include "url/url_util.h"
 
 #include "atom/common/node_includes.h"
 
@@ -188,8 +189,10 @@ void WebFrame::SetLayoutZoomLevelLimits(double min_level, double max_level) {
 }
 
 v8::Local<v8::Value> WebFrame::RegisterEmbedderCustomElement(
+    v8::Local<v8::Object> context,
     const base::string16& name,
     v8::Local<v8::Object> options) {
+  v8::Context::Scope context_scope(context->CreationContext());
   return web_frame_->GetDocument().RegisterEmbedderCustomElement(
       blink::WebString::FromUTF16(name), options);
 }
@@ -215,15 +218,14 @@ int WebFrame::GetWebFrameId(v8::Local<v8::Value> content_window) {
 
 void WebFrame::SetSpellCheckProvider(mate::Arguments* args,
                                      const std::string& language,
-                                     bool auto_spell_correct_turned_on,
                                      v8::Local<v8::Object> provider) {
   if (!provider->Has(mate::StringToV8(args->isolate(), "spellCheck"))) {
     args->ThrowError("\"spellCheck\" has to be defined");
     return;
   }
 
-  auto client = std::make_unique<SpellCheckClient>(
-      language, auto_spell_correct_turned_on, args->isolate(), provider);
+  auto client =
+      std::make_unique<SpellCheckClient>(language, args->isolate(), provider);
   // Set spellchecker for all live frames in the same process or
   // in the sandbox mode for all live sub frames to this WebFrame.
   FrameSpellChecker spell_checker(
@@ -277,7 +279,7 @@ void WebFrame::RegisterURLSchemeAsPrivileged(const std::string& scheme,
         privileged_scheme);
   }
   if (corsEnabled) {
-    blink::SchemeRegistry::RegisterURLSchemeAsCORSEnabled(privileged_scheme);
+    url::AddCORSEnabledScheme(scheme.c_str());
   }
 }
 

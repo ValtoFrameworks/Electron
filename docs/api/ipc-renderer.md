@@ -74,13 +74,13 @@ and replies by setting `event.returnValue`.
 **Note:** Sending a synchronous message will block the whole renderer process,
 unless you know what you are doing you should never use it.
 
-### `ipcRenderer.sendTo(windowId, channel, [, arg1][, arg2][, ...])`
+### `ipcRenderer.sendTo(webContentsId, channel, [, arg1][, arg2][, ...])`
 
-* `windowId` Number
+* `webContentsId` Number
 * `channel` String
 * `...args` any[]
 
-Sends a message to a window with `windowid` via `channel`.
+Sends a message to a window with `webContentsId` via `channel`.
 
 ### `ipcRenderer.sendToHost(channel[, arg1][, arg2][, ...])`
 
@@ -89,3 +89,17 @@ Sends a message to a window with `windowid` via `channel`.
 
 Like `ipcRenderer.send` but the event will be sent to the `<webview>` element in
 the host page instead of the main process.
+
+## Event object
+
+The `event` object passed to the `callback` has the following methods:
+
+### `event.senderId`
+
+Returns the `webContents.id` that sent the message, you can call
+`event.sender.sendTo(event.senderId, ...)` to reply to the message, see
+[ipcRenderer.sendTo][ipc-renderer-sendto] for more information.
+This only applies to messages sent from a different renderer.
+Messages sent directly from the main process set `event.senderId` to `0`.
+
+[ipc-renderer-sendto]: #ipcrenderersendtowindowid-channel--arg1-arg2-

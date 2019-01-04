@@ -5,6 +5,7 @@
 #ifndef ATOM_BROWSER_API_ATOM_API_COOKIES_H_
 #define ATOM_BROWSER_API_ATOM_API_COOKIES_H_
 
+#include <memory>
 #include <string>
 
 #include "atom/browser/api/trackable_object.h"
@@ -55,7 +56,7 @@ class Cookies : public mate::TrackableObject<Cookies> {
   void Set(const base::DictionaryValue& details, const SetCallback& callback);
   void FlushStore(const base::Closure& callback);
 
-  // AtomBrowserContext::RegisterCookieChangeCallback subscription:
+  // CookieChangeNotifier subscription:
   void OnCookieChanged(const CookieDetails*);
 
  private:

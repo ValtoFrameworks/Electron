@@ -9,13 +9,13 @@
 #include "atom/browser/mac/dict_util.h"
 #include "atom/browser/native_window.h"
 #include "atom/browser/window_list.h"
+#include "atom/common/application_info.h"
 #include "atom/common/platform_util.h"
 #include "base/mac/bundle_locations.h"
 #include "base/mac/foundation_util.h"
 #include "base/mac/mac_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/sys_string_conversions.h"
-#include "brightray/common/application_info.h"
 #include "net/base/mac/url_conversions.h"
 #include "ui/gfx/image/image.h"
 #include "url/gurl.h"
@@ -217,23 +217,85 @@ Browser::LoginItemSettings Browser::GetLoginItemSettings(
   return settings;
 }
 
+// copied from GetLoginItemForApp in base/mac/mac_util.mm
+LSSharedFileListItemRef GetLoginItemForApp() {
+  base::ScopedCFTypeRef<LSSharedFileListRef> login_items(
+      LSSharedFileListCreate(NULL, kLSSharedFileListSessionLoginItems, NULL));
+  if (!login_items.get()) {
+    LOG(ERROR) << "Couldn't get a Login Items list.";
+    return NULL;
+  }
+  base::scoped_nsobject<NSArray> login_items_array(
+      base::mac::CFToNSCast(LSSharedFileListCopySnapshot(login_items, NULL)));
+  NSURL* url = [NSURL fileURLWithPath:[base::mac::MainBundle() bundlePath]];
+  for (NSUInteger i = 0; i < [login_items_array count]; ++i) {
+    LSSharedFileListItemRef item =
+        reinterpret_cast<LSSharedFileListItemRef>(login_items_array[i]);
+    CFURLRef item_url_ref = NULL;
+    if (LSSharedFileListItemResolve(item, 0, &item_url_ref, NULL) == noErr &&
+        item_url_ref) {
+      base::ScopedCFTypeRef<CFURLRef> item_url(item_url_ref);
+      if (CFEqual(item_url, url)) {
+        CFRetain(item);
+        return item;
+      }
+    }
+  }
+  return NULL;
+}
+
+void RemoveFromLoginItems() {
+  base::ScopedCFTypeRef<LSSharedFileListRef> list(
+      LSSharedFileListCreate(NULL, kLSSharedFileListSessionLoginItems, NULL));
+  if (!list) {
+    LOG(ERROR) << "Unable to access shared file list";
+    return;
+  }
+
+  if (GetLoginItemForApp() != NULL) {
+    base::scoped_nsobject<NSArray> login_items_array(
+        base::mac::CFToNSCast(LSSharedFileListCopySnapshot(list, NULL)));
+
+    if (!login_items_array) {
+      LOG(ERROR) << "No items in list of auto-loaded apps";
+      return;
+    }
+
+    for (NSUInteger i = 0; i < [login_items_array count]; ++i) {
+      LSSharedFileListItemRef item =
+          reinterpret_cast<LSSharedFileListItemRef>(login_items_array[i]);
+      CFURLRef url_ref = NULL;
+      if (LSSharedFileListItemResolve(item, 0, &url_ref, NULL) == noErr &&
+          item) {
+        base::ScopedCFTypeRef<CFURLRef> url(url_ref);
+        if ([[base::mac::CFToNSCast(url.get()) path]
+                hasPrefix:[[NSBundle mainBundle] bundlePath]])
+          LSSharedFileListItemRemove(list, item);
+      }
+    }
+  }
+}
+
 void Browser::SetLoginItemSettings(LoginItemSettings settings) {
 #if defined(MAS_BUILD)
-  platform_util::SetLoginItemEnabled(settings.open_at_login);
+  if (!platform_util::SetLoginItemEnabled(settings.open_at_login)) {
+    LOG(ERROR) << "Unable to set login item enabled on sandboxed app.";
+  }
 #else
   if (settings.open_at_login)
     base::mac::AddToLoginItems(settings.open_as_hidden);
-  else
-    base::mac::RemoveFromLoginItems();
+  else {
+    RemoveFromLoginItems();
+  }
 #endif
 }
 
 std::string Browser::GetExecutableFileVersion() const {
-  return brightray::GetApplicationVersion();
+  return GetApplicationVersion();
 }
 
 std::string Browser::GetExecutableFileProductName() const {
-  return brightray::GetApplicationName();
+  return GetApplicationName();
 }
 
 int Browser::DockBounce(BounceType type) {
@@ -332,13 +394,12 @@ void Browser::ShowAboutPanel() {
 void Browser::SetAboutPanelOptions(const base::DictionaryValue& options) {
   about_panel_options_.Clear();
 
-  // Upper case option keys for orderFrontStandardAboutPanelWithOptions format
-  for (base::DictionaryValue::Iterator iter(options); !iter.IsAtEnd();
-       iter.Advance()) {
-    std::string key = iter.key();
-    if (!key.empty() && iter.value().is_string()) {
+  for (const auto& pair : options) {
+    std::string key = pair.first;
+    const auto& val = pair.second;
+    if (!key.empty() && val->is_string()) {
       key[0] = base::ToUpperASCII(key[0]);
-      about_panel_options_.SetString(key, iter.value().GetString());
+      about_panel_options_.SetString(key, val->GetString());
     }
   }
 }

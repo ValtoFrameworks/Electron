@@ -12,10 +12,11 @@
 #include "base/nix/xdg_util.h"
 #include "base/process/kill.h"
 #include "base/process/launch.h"
+#include "chrome/browser/ui/libgtkui/gtk_util.h"
 #include "url/gurl.h"
 
 #define ELECTRON_TRASH "ELECTRON_TRASH"
-#define ELECTRON_DEFAULT_TRASH "gvfs-trash"
+#define ELECTRON_DEFAULT_TRASH "gio"
 
 namespace {
 
@@ -32,16 +33,15 @@ bool XDGUtilV(const std::vector<std::string>& argv, const bool wait_for_exit) {
   if (!process.IsValid())
     return false;
 
-  if (!wait_for_exit) {
-    base::EnsureProcessGetsReaped(process.Pid());
-    return true;
+  if (wait_for_exit) {
+    int exit_code = -1;
+    if (!process.WaitForExit(&exit_code))
+      return false;
+    return (exit_code == 0);
   }
 
-  int exit_code = -1;
-  if (!process.WaitForExit(&exit_code))
-    return false;
-
-  return (exit_code == 0);
+  base::EnsureProcessGetsReaped(std::move(process));
+  return true;
 }
 
 bool XDGUtil(const std::string& util,
@@ -81,7 +81,7 @@ bool OpenItem(const base::FilePath& full_path) {
   return XDGOpen(full_path.value(), false);
 }
 
-bool OpenExternal(const GURL& url, bool activate) {
+bool OpenExternal(const GURL& url, const OpenExternalOptions& options) {
   // Don't wait for exit, since we don't want to wait for the browser/email
   // client window to close before returning
   if (url.SchemeIs("mailto"))
@@ -91,10 +91,10 @@ bool OpenExternal(const GURL& url, bool activate) {
 }
 
 void OpenExternal(const GURL& url,
-                  bool activate,
+                  const OpenExternalOptions& options,
                   const OpenExternalCallback& callback) {
   // TODO(gabriel): Implement async open if callback is specified
-  callback.Run(OpenExternal(url, activate) ? "" : "Failed to open");
+  callback.Run(OpenExternal(url, options) ? "" : "Failed to open");
 }
 
 bool MoveItemToTrash(const base::FilePath& full_path) {
@@ -126,12 +126,13 @@ bool MoveItemToTrash(const base::FilePath& full_path) {
   } else if (trash.compare("trash-cli") == 0) {
     argv.push_back("trash-put");
     argv.push_back(full_path.value());
-  } else if (trash.compare("gio") == 0) {
-    argv.push_back("gio");
-    argv.push_back("trash");
+  } else if (trash.compare("gvfs-trash") == 0) {
+    // retain support for deprecated gvfs-trash
+    argv.push_back("gvfs-trash");
     argv.push_back(full_path.value());
   } else {
     argv.push_back(ELECTRON_DEFAULT_TRASH);
+    argv.push_back("trash");
     argv.push_back(full_path.value());
   }
   return XDGUtilV(argv, true);
@@ -144,6 +145,20 @@ void Beep() {
     return;
   fprintf(console, "\a");
   fclose(console);
+}
+
+bool GetDesktopName(std::string* setme) {
+  bool found = false;
+
+  std::unique_ptr<base::Environment> env(base::Environment::Create());
+  std::string desktop_id = libgtkui::GetDesktopName(env.get());
+  constexpr char const* libcc_default_id = "chromium-browser.desktop";
+  if (!desktop_id.empty() && (desktop_id != libcc_default_id)) {
+    *setme = desktop_id;
+    found = true;
+  }
+
+  return found;
 }
 
 }  // namespace platform_util

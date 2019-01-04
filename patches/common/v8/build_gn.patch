@@ -1,0 +1,28 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Ales Pergl <alpergl@microsoft.com>
+Date: Mon, 22 Oct 2018 10:47:12 -0700
+Subject: build_gn.patch
+
+
+diff --git a/BUILD.gn b/BUILD.gn
+index c6a58776cd6a81cf5653b94a8db1a04dd7e54045..ac74cdec115b6cc54d05817f063153628cf5e9fe 100644
+--- a/BUILD.gn
++++ b/BUILD.gn
+@@ -221,7 +221,7 @@ config("internal_config") {
+ 
+   defines = []
+ 
+-  if (is_component_build) {
++  if (is_component_build || is_electron_build) {
+     defines += [ "BUILDING_V8_SHARED" ]
+   }
+ }
+@@ -3245,6 +3245,8 @@ if (v8_use_snapshot && current_toolchain == v8_snapshot_toolchain) {
+ 
+     configs = [ ":internal_config" ]
+ 
++    configs += [ "//electron/build/config:build_time_executable" ]
++
+     deps = [
+       ":v8_base",
+       ":v8_init",

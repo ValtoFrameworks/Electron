@@ -10,27 +10,30 @@ title is `Electron`:
 
 ```javascript
 // In the renderer process.
-const {desktopCapturer} = require('electron')
+const { desktopCapturer } = require('electron')
 
-desktopCapturer.getSources({types: ['window', 'screen']}, (error, sources) => {
+desktopCapturer.getSources({ types: ['window', 'screen'] }, async (error, sources) => {
   if (error) throw error
-  for (let i = 0; i < sources.length; ++i) {
-    if (sources[i].name === 'Electron') {
-      navigator.mediaDevices.getUserMedia({
-        audio: false,
-        video: {
-          mandatory: {
-            chromeMediaSource: 'desktop',
-            chromeMediaSourceId: sources[i].id,
-            minWidth: 1280,
-            maxWidth: 1280,
-            minHeight: 720,
-            maxHeight: 720
+  for (const source of sources) {
+    if (source.name === 'Electron') {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: {
+            mandatory: {
+              chromeMediaSource: 'desktop',
+              chromeMediaSourceId: source.id,
+              minWidth: 1280,
+              maxWidth: 1280,
+              minHeight: 720,
+              maxHeight: 720
+            }
           }
-        }
-      })
-      .then((stream) => handleStream(stream))
-      .catch((e) => handleError(e))
+        })
+        handleStream(stream)
+      } catch (e) {
+        handleError(e)
+      }
       return
     }
   }
@@ -81,6 +84,9 @@ The `desktopCapturer` module has the following methods:
     to be captured, available types are `screen` and `window`.
   * `thumbnailSize` [Size](structures/size.md) (optional) - The size that the media source thumbnail
     should be scaled to. Default is `150` x `150`.
+  * `fetchWindowIcons` Boolean (optional) - Set to true to enable fetching window icons. The default
+    value is false. When false the appIcon property of the sources return null. Same if a source has
+    the type screen.
 * `callback` Function
   * `error` Error
   * `sources` [DesktopCapturerSource[]](structures/desktop-capturer-source.md)

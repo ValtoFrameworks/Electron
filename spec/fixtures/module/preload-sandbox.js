@@ -1,6 +1,6 @@
 (function () {
-  const {setImmediate} = require('timers')
-  const {ipcRenderer} = require('electron')
+  const { setImmediate } = require('timers')
+  const { ipcRenderer } = require('electron')
   window.ipcRenderer = ipcRenderer
   window.setImmediate = setImmediate
   window.require = require
@@ -14,7 +14,6 @@
         pid: process.pid,
         arch: process.arch,
         platform: process.platform,
-        resourcesPath: process.resourcesPath,
         sandboxed: process.sandboxed,
         type: process.type,
         version: process.version,
@@ -23,7 +22,16 @@
     }
   } else if (location.href !== 'about:blank') {
     addEventListener('DOMContentLoaded', () => {
-      ipcRenderer.send('child-loaded', window.opener == null, document.body.innerHTML)
-    }, false)
+      ipcRenderer.on('touch-the-opener', () => {
+        let errorMessage = null
+        try {
+          const openerDoc = opener.document // eslint-disable-line no-unused-vars
+        } catch (error) {
+          errorMessage = error.message
+        }
+        ipcRenderer.send('answer', errorMessage)
+      })
+      ipcRenderer.send('child-loaded', window.opener == null, document.body.innerHTML, location.href)
+    })
   }
 })()

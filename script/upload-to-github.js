@@ -2,20 +2,20 @@ if (!process.env.CI) require('dotenv-safe').load()
 
 const GitHub = require('github')
 const github = new GitHub()
-github.authenticate({type: 'token', token: process.env.ELECTRON_GITHUB_TOKEN})
+github.authenticate({ type: 'token', token: process.env.ELECTRON_GITHUB_TOKEN })
 
 if (process.argv.length < 6) {
   console.log('Usage: upload-to-github filePath fileName releaseId')
   process.exit(1)
 }
-let filePath = process.argv[2]
-let fileName = process.argv[3]
-let releaseId = process.argv[4]
-let releaseVersion = process.argv[5]
+const filePath = process.argv[2]
+const fileName = process.argv[3]
+const releaseId = process.argv[4]
+const releaseVersion = process.argv[5]
 
 const targetRepo = releaseVersion.indexOf('nightly') > 0 ? 'nightlies' : 'electron'
 
-let githubOpts = {
+const githubOpts = {
   owner: 'electron',
   repo: targetRepo,
   id: releaseId,
@@ -34,7 +34,10 @@ function uploadToGitHub () {
       console.log(`Error uploading ${fileName} to GitHub, will retry.  Error was:`, err)
       retry++
       github.repos.getRelease(githubOpts).then(release => {
-        let existingAssets = release.data.assets.filter(asset => asset.name === fileName)
+        const existingAssets = release.data.assets.filter(asset => asset.name === fileName)
+        console.log('There are', release.data.assets.length, 'existing releases')
+        console.log(JSON.stringify(release.data.assets))
+        console.log(githubOpts)
         if (existingAssets.length > 0) {
           console.log(`${fileName} already exists; will delete before retrying upload.`)
           github.repos.deleteAsset({

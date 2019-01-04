@@ -14,7 +14,7 @@
 #include "atom/common/options_switches.h"
 #include "base/bind.h"
 #include "base/files/file_util.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "chrome/common/pref_names.h"
 #include "components/download/public/common/download_danger_type.h"
 #include "components/prefs/pref_service.h"
@@ -70,6 +70,18 @@ void AtomDownloadManagerDelegate::GetItemSavePath(download::DownloadItem* item,
     *path = download->GetSavePath();
 }
 
+void AtomDownloadManagerDelegate::GetItemSaveDialogOptions(
+    download::DownloadItem* item,
+    file_dialog::DialogSettings* options) {
+  v8::Isolate* isolate = v8::Isolate::GetCurrent();
+  v8::Locker locker(isolate);
+  v8::HandleScope handle_scope(isolate);
+  api::DownloadItem* download =
+      api::DownloadItem::FromWrappedClass(isolate, item);
+  if (download)
+    *options = download->GetSaveDialogOptions();
+}
+
 void AtomDownloadManagerDelegate::OnDownloadPathGenerated(
     uint32_t download_id,
     const content::DownloadTargetCallback& callback,
@@ -86,7 +98,7 @@ void AtomDownloadManagerDelegate::OnDownloadPathGenerated(
   auto* relay =
       web_contents ? NativeWindowRelay::FromWebContents(web_contents) : nullptr;
   if (relay)
-    window = relay->window.get();
+    window = relay->GetNativeWindow();
 
   auto* web_preferences = WebContentsPreferences::From(web_contents);
   bool offscreen =
@@ -96,10 +108,14 @@ void AtomDownloadManagerDelegate::OnDownloadPathGenerated(
   GetItemSavePath(item, &path);
   // Show save dialog if save path was not set already on item
   file_dialog::DialogSettings settings;
-  settings.parent_window = window;
+  GetItemSaveDialogOptions(item, &settings);
+  if (!settings.parent_window)
+    settings.parent_window = window;
   settings.force_detached = offscreen;
-  settings.title = item->GetURL().spec();
-  settings.default_path = default_path;
+  if (settings.title.size() == 0)
+    settings.title = item->GetURL().spec();
+  if (!settings.default_path.empty())
+    settings.default_path = default_path;
   if (path.empty() && file_dialog::ShowSaveDialog(settings, &path)) {
     // Remember the last selected download directory.
     AtomBrowserContext* browser_context = static_cast<AtomBrowserContext*>(
@@ -150,8 +166,8 @@ bool AtomDownloadManagerDelegate::DetermineDownloadTarget(
   if (!save_path.empty()) {
     callback.Run(save_path,
                  download::DownloadItem::TARGET_DISPOSITION_OVERWRITE,
-                 download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS,
-                 save_path, download::DOWNLOAD_INTERRUPT_REASON_NONE);
+                 download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS, save_path,
+                 download::DOWNLOAD_INTERRUPT_REASON_NONE);
     return true;
   }
 
@@ -162,7 +178,7 @@ bool AtomDownloadManagerDelegate::DetermineDownloadTarget(
 
   base::PostTaskWithTraitsAndReplyWithResult(
       FROM_HERE,
-      {base::MayBlock(), base::TaskPriority::BACKGROUND,
+      {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
        base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
       base::BindOnce(&CreateDownloadPath, download->GetURL(),
                      download->GetContentDisposition(),

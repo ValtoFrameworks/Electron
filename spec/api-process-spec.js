@@ -1,4 +1,8 @@
-const {expect} = require('chai')
+const { remote } = require('electron')
+const fs = require('fs')
+const path = require('path')
+
+const { expect } = require('chai')
 
 describe('process module', () => {
   describe('process.getCreationTime()', () => {
@@ -34,13 +38,16 @@ describe('process module', () => {
     })
   })
 
-  describe('process.getProcessMemoryInfo()', () => {
-    it('returns process memory info object', () => {
-      const processMemoryInfo = process.getProcessMemoryInfo()
-      expect(processMemoryInfo.peakWorkingSetSize).to.be.a('number')
-      expect(processMemoryInfo.privateBytes).to.be.a('number')
-      expect(processMemoryInfo.sharedBytes).to.be.a('number')
-      expect(processMemoryInfo.workingSetSize).to.be.a('number')
+  describe('process.getProcessMemoryInfo()', async () => {
+    it('resolves promise successfully with valid data', async () => {
+      const memoryInfo = await process.getProcessMemoryInfo()
+      expect(memoryInfo).to.be.an('object')
+      if (process.platform === 'linux' || process.platform === 'windows') {
+        expect(memoryInfo.residentSet).to.be.a('number').greaterThan(0)
+      }
+      expect(memoryInfo.private).to.be.a('number').greaterThan(0)
+      // Shared bytes can be zero
+      expect(memoryInfo.shared).to.be.a('number').greaterThan(-1)
     })
   })
 
@@ -64,6 +71,34 @@ describe('process module', () => {
       expect(heapStats.mallocedMemory).to.be.a('number')
       expect(heapStats.peakMallocedMemory).to.be.a('number')
       expect(heapStats.doesZapGarbage).to.be.a('boolean')
+    })
+  })
+
+  describe('process.takeHeapSnapshot()', () => {
+    it('returns true on success', () => {
+      const filePath = path.join(remote.app.getPath('temp'), 'test.heapsnapshot')
+
+      const cleanup = () => {
+        try {
+          fs.unlinkSync(filePath)
+        } catch (e) {
+          // ignore error
+        }
+      }
+
+      try {
+        const success = process.takeHeapSnapshot(filePath)
+        expect(success).to.be.true()
+        const stats = fs.statSync(filePath)
+        expect(stats.size).not.to.be.equal(0)
+      } finally {
+        cleanup()
+      }
+    })
+
+    it('returns false on failure', () => {
+      const success = process.takeHeapSnapshot('')
+      expect(success).to.be.false()
     })
   })
 })

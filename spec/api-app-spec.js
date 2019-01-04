@@ -6,11 +6,12 @@ const https = require('https')
 const net = require('net')
 const fs = require('fs')
 const path = require('path')
-const {ipcRenderer, remote} = require('electron')
-const {closeWindow} = require('./window-helpers')
+const { ipcRenderer, remote } = require('electron')
+const { emittedOnce } = require('./events-helpers')
+const { closeWindow } = require('./window-helpers')
 
-const {expect} = chai
-const {app, BrowserWindow, Menu, ipcMain} = remote
+const { expect } = chai
+const { app, BrowserWindow, Menu, ipcMain } = remote
 
 const isCI = remote.getGlobal('isCi')
 
@@ -41,7 +42,7 @@ describe('electron module', () => {
 
     it('always returns the internal electron module', (done) => {
       ipcMain.once('answer', () => done())
-      window.loadURL(`file://${path.join(__dirname, 'fixtures', 'api', 'electron-module-app', 'index.html')}`)
+      window.loadFile(path.join(__dirname, 'fixtures', 'api', 'electron-module-app', 'index.html'))
     })
   })
 })
@@ -121,6 +122,17 @@ describe('app module', () => {
     })
   })
 
+  describe('app.getLocaleCountryCode()', () => {
+    it('should be empty or have length of two', () => {
+      let expectedLength = 2
+      if (isCI && process.platform === 'linux') {
+        // Linux CI machines have no locale.
+        expectedLength = 0
+      }
+      expect(app.getLocaleCountryCode()).to.be.a('string').and.have.lengthOf(expectedLength)
+    })
+  })
+
   describe('app.isPackaged', () => {
     it('should be false durings tests', () => {
       expect(app.isPackaged).to.be.false()
@@ -146,38 +158,36 @@ describe('app module', () => {
       if (appProcess != null) appProcess.kill()
     })
 
-    it('emits a process exit event with the code', done => {
+    it('emits a process exit event with the code', async () => {
       const appPath = path.join(__dirname, 'fixtures', 'api', 'quit-app')
       const electronPath = remote.getGlobal('process').execPath
       let output = ''
 
       appProcess = ChildProcess.spawn(electronPath, [appPath])
       appProcess.stdout.on('data', data => { output += data })
+      const [code] = await emittedOnce(appProcess, 'close')
 
-      appProcess.on('close', code => {
-        if (process.platform !== 'win32') {
-          expect(output).to.include('Exit event with code: 123')
-        }
-        expect(code).to.equal(123)
-        done()
-      })
+      if (process.platform !== 'win32') {
+        expect(output).to.include('Exit event with code: 123')
+      }
+      expect(code).to.equal(123)
     })
 
-    it('closes all windows', done => {
+    it('closes all windows', async function () {
       const appPath = path.join(__dirname, 'fixtures', 'api', 'exit-closes-all-windows-app')
       const electronPath = remote.getGlobal('process').execPath
 
       appProcess = ChildProcess.spawn(electronPath, [appPath])
-      appProcess.on('close', (code, signal) => {
-        expect(signal).to.equal(null, 'exit signal should be null, if you see this please tag @MarshallOfSound')
-        expect(code).to.equal(123, 'exit code should be 123, if you see this please tag @MarshallOfSound')
-        done()
-      })
+      const [code, signal] = await emittedOnce(appProcess, 'close')
+
+      expect(signal).to.equal(null, 'exit signal should be null, if you see this please tag @MarshallOfSound')
+      expect(code).to.equal(123, 'exit code should be 123, if you see this please tag @MarshallOfSound')
     })
 
-    it('exits gracefully', function (done) {
+    it('exits gracefully', async function () {
       if (!['darwin', 'linux'].includes(process.platform)) {
         this.skip()
+        return
       }
 
       const electronPath = remote.getGlobal('process').execPath
@@ -187,34 +197,11 @@ describe('app module', () => {
       // Singleton will send us greeting data to let us know it's running.
       // After that, ask it to exit gracefully and confirm that it does.
       appProcess.stdout.on('data', data => appProcess.kill())
-      appProcess.on('exit', (code, sig) => {
-        const message = `code:\n${code}\nsig:\n${sig}`
-        expect(code).to.equal(0, message)
-        expect(sig).to.be.null(message)
-        done()
-      })
-    })
-  })
+      const [code, signal] = await emittedOnce(appProcess, 'close')
 
-  // TODO(MarshallOfSound) - Remove in 4.0.0
-  describe('app.makeSingleInstance', () => {
-    it('prevents the second launch of app', function (done) {
-      this.timeout(120000)
-      const appPath = path.join(__dirname, 'fixtures', 'api', 'singleton-old')
-      // First launch should exit with 0.
-      const first = ChildProcess.spawn(remote.process.execPath, [appPath])
-      first.once('exit', code => {
-        expect(code).to.equal(0)
-      })
-      // Start second app when received output.
-      first.stdout.once('data', () => {
-        // Second launch should exit with 1.
-        const second = ChildProcess.spawn(remote.process.execPath, [appPath])
-        second.once('exit', code => {
-          expect(code).to.equal(1)
-          done()
-        })
-      })
+      const message = `code:\n${code}\nsignal:\n${signal}`
+      expect(code).to.equal(0, message)
+      expect(signal).to.be.null(message)
     })
   })
 
@@ -289,7 +276,7 @@ describe('app module', () => {
     })
 
     it('sets the current activity', () => {
-      app.setUserActivity('com.electron.testActivity', {testData: '123'})
+      app.setUserActivity('com.electron.testActivity', { testData: '123' })
       expect(app.getCurrentActivityType()).to.equal('com.electron.testActivity')
     })
   })
@@ -382,6 +369,38 @@ describe('app module', () => {
       })
       w = new BrowserWindow({ show: false })
     })
+
+    it('should emit desktop-capturer-get-sources event when desktopCapturer.getSources() is invoked', (done) => {
+      app.once('desktop-capturer-get-sources', (event, webContents) => {
+        expect(webContents).to.equal(w.webContents)
+        done()
+      })
+      w = new BrowserWindow({ show: false })
+      w.loadURL('about:blank')
+      w.webContents.executeJavaScript(`require('electron').desktopCapturer.getSources({ types: ['screen'] }, () => {})`)
+    })
+
+    it('should emit remote-require event when remote.require() is invoked', (done) => {
+      app.once('remote-require', (event, webContents, moduleName) => {
+        expect(webContents).to.equal(w.webContents)
+        expect(moduleName).to.equal('test')
+        done()
+      })
+      w = new BrowserWindow({ show: false })
+      w.loadURL('about:blank')
+      w.webContents.executeJavaScript(`require('electron').remote.require('test')`)
+    })
+
+    it('should emit remote-get-global event when remote.getGlobal() is invoked', (done) => {
+      app.once('remote-get-global', (event, webContents, globalName) => {
+        expect(webContents).to.equal(w.webContents)
+        expect(globalName).to.equal('test')
+        done()
+      })
+      w = new BrowserWindow({ show: false })
+      w.loadURL('about:blank')
+      w.webContents.executeJavaScript(`require('electron').remote.getGlobal('test')`)
+    })
   })
 
   describe('app.setBadgeCount', () => {
@@ -447,40 +466,22 @@ describe('app module', () => {
     })
 
     beforeEach(() => {
-      app.setLoginItemSettings({openAtLogin: false})
-      app.setLoginItemSettings({openAtLogin: false, path: updateExe, args: processStartArgs})
+      app.setLoginItemSettings({ openAtLogin: false })
+      app.setLoginItemSettings({ openAtLogin: false, path: updateExe, args: processStartArgs })
     })
 
     afterEach(() => {
-      app.setLoginItemSettings({openAtLogin: false})
-      app.setLoginItemSettings({openAtLogin: false, path: updateExe, args: processStartArgs})
+      app.setLoginItemSettings({ openAtLogin: false })
+      app.setLoginItemSettings({ openAtLogin: false, path: updateExe, args: processStartArgs })
     })
 
-    it('returns the login item status of the app', done => {
-      app.setLoginItemSettings({openAtLogin: true})
-      expect(app.getLoginItemSettings()).to.deep.equal({
-        openAtLogin: true,
-        openAsHidden: false,
-        wasOpenedAtLogin: false,
-        wasOpenedAsHidden: false,
-        restoreState: false
-      })
-
-      app.setLoginItemSettings({openAtLogin: true, openAsHidden: true})
-      expect(app.getLoginItemSettings()).to.deep.equal({
-        openAtLogin: true,
-        openAsHidden: process.platform === 'darwin' && !process.mas, // Only available on macOS
-        wasOpenedAtLogin: false,
-        wasOpenedAsHidden: false,
-        restoreState: false
-      })
-
-      app.setLoginItemSettings({})
+    it('sets and returns the app as a login item', done => {
+      app.setLoginItemSettings({ openAtLogin: true })
       // Wait because login item settings are not applied immediately in MAS build
-      const delay = process.mas ? 100 : 0
+      const delay = process.mas ? 250 : 0
       setTimeout(() => {
         expect(app.getLoginItemSettings()).to.deep.equal({
-          openAtLogin: false,
+          openAtLogin: true,
           openAsHidden: false,
           wasOpenedAtLogin: false,
           wasOpenedAsHidden: false,
@@ -490,6 +491,47 @@ describe('app module', () => {
       }, delay)
     })
 
+    it('adds a login item that loads in hidden mode', done => {
+      app.setLoginItemSettings({ openAtLogin: true, openAsHidden: true })
+      // Wait because login item settings are not applied immediately in MAS build
+      const delay = process.mas ? 250 : 0
+      setTimeout(() => {
+        expect(app.getLoginItemSettings()).to.deep.equal({
+          openAtLogin: true,
+          openAsHidden: process.platform === 'darwin' && !process.mas, // Only available on macOS
+          wasOpenedAtLogin: false,
+          wasOpenedAsHidden: false,
+          restoreState: false
+        })
+        done()
+      }, delay)
+    })
+
+    it('correctly sets and unsets the LoginItem', function () {
+      expect(app.getLoginItemSettings().openAtLogin).to.be.false()
+
+      app.setLoginItemSettings({ openAtLogin: true })
+      expect(app.getLoginItemSettings().openAtLogin).to.be.true()
+
+      app.setLoginItemSettings({ openAtLogin: false })
+      expect(app.getLoginItemSettings().openAtLogin).to.be.false()
+    })
+
+    it('correctly sets and unsets the LoginItem as hidden', function () {
+      if (process.platform !== 'darwin' || process.mas) this.skip()
+
+      expect(app.getLoginItemSettings().openAtLogin).to.be.false()
+      expect(app.getLoginItemSettings().openAsHidden).to.be.false()
+
+      app.setLoginItemSettings({ openAtLogin: true, openAsHidden: true })
+      expect(app.getLoginItemSettings().openAtLogin).to.be.true()
+      expect(app.getLoginItemSettings().openAsHidden).to.be.true()
+
+      app.setLoginItemSettings({ openAtLogin: true, openAsHidden: false })
+      expect(app.getLoginItemSettings().openAtLogin).to.be.true()
+      expect(app.getLoginItemSettings().openAsHidden).to.be.false()
+    })
+
     it('allows you to pass a custom executable and arguments', function () {
       if (process.platform !== 'win32') {
         // FIXME(alexeykuzmin): Skip the test.
@@ -497,7 +539,7 @@ describe('app module', () => {
         return
       }
 
-      app.setLoginItemSettings({openAtLogin: true, path: updateExe, args: processStartArgs})
+      app.setLoginItemSettings({ openAtLogin: true, path: updateExe, args: processStartArgs })
 
       expect(app.getLoginItemSettings().openAtLogin).to.be.false()
       expect(app.getLoginItemSettings({
@@ -737,61 +779,45 @@ describe('app module', () => {
       }
     })
 
-    it('fetches a non-empty icon', done => {
-      app.getFileIcon(iconPath, (err, icon) => {
-        expect(err).to.be.null()
-        expect(icon.isEmpty()).to.be.false()
-        done()
-      })
+    it('fetches a non-empty icon', async () => {
+      const icon = await app.getFileIcon(iconPath)
+      expect(icon.isEmpty()).to.be.false()
     })
 
-    it('fetches normal icon size by default', done => {
-      app.getFileIcon(iconPath, (err, icon) => {
-        const size = icon.getSize()
+    it('fetches normal icon size by default', async () => {
+      const icon = await app.getFileIcon(iconPath)
+      const size = icon.getSize()
 
-        expect(err).to.be.null()
-        expect(size.height).to.equal(sizes.normal)
-        expect(size.width).to.equal(sizes.normal)
-        done()
-      })
+      expect(size.height).to.equal(sizes.normal)
+      expect(size.width).to.equal(sizes.normal)
     })
 
     describe('size option', () => {
-      it('fetches a small icon', (done) => {
-        app.getFileIcon(iconPath, { size: 'small' }, (err, icon) => {
-          const size = icon.getSize()
-          expect(err).to.be.null()
-          expect(size.height).to.equal(sizes.small)
-          expect(size.width).to.equal(sizes.small)
-          done()
-        })
+      it('fetches a small icon', async () => {
+        const icon = await app.getFileIcon(iconPath, { size: 'small' })
+        const size = icon.getSize()
+
+        expect(size.height).to.equal(sizes.small)
+        expect(size.width).to.equal(sizes.small)
       })
 
-      it('fetches a normal icon', (done) => {
-        app.getFileIcon(iconPath, { size: 'normal' }, (err, icon) => {
-          const size = icon.getSize()
-          expect(err).to.be.null()
-          expect(size.height).to.equal(sizes.normal)
-          expect(size.width).to.equal(sizes.normal)
-          done()
-        })
+      it('fetches a normal icon', async () => {
+        const icon = await app.getFileIcon(iconPath, { size: 'normal' })
+        const size = icon.getSize()
+
+        expect(size.height).to.equal(sizes.normal)
+        expect(size.width).to.equal(sizes.normal)
       })
 
-      it('fetches a large icon', function (done) {
+      it('fetches a large icon', async () => {
         // macOS does not support large icons
-        if (process.platform === 'darwin') {
-          // FIXME(alexeykuzmin): Skip the test.
-          // this.skip()
-          return done()
-        }
+        if (process.platform === 'darwin') return
 
-        app.getFileIcon(iconPath, { size: 'large' }, (err, icon) => {
-          const size = icon.getSize()
-          expect(err).to.be.null()
-          expect(size.height).to.equal(sizes.large)
-          expect(size.width).to.equal(sizes.large)
-          done()
-        })
+        const icon = await app.getFileIcon(iconPath, { size: 'large' })
+        const size = icon.getSize()
+
+        expect(size.height).to.equal(sizes.large)
+        expect(size.width).to.equal(sizes.large)
       })
     })
   })
@@ -802,15 +828,7 @@ describe('app module', () => {
       expect(appMetrics).to.be.an('array').and.have.lengthOf.at.least(1, 'App memory info object is not > 0')
 
       const types = []
-      for (const {memory, pid, type, cpu} of appMetrics) {
-        expect(memory.workingSetSize).to.be.above(0, 'working set size is not > 0')
-
-        // windows causes failures here due to CI server configuration
-        if (process.platform !== 'win32') {
-          expect(memory.privateBytes).to.be.above(0, 'private bytes is not > 0')
-          expect(memory.sharedBytes).to.be.above(0, 'shared bytes is not > 0')
-        }
-
+      for (const { pid, type, cpu } of appMetrics) {
         expect(pid).to.be.above(0, 'pid is not > 0')
         expect(type).to.be.a('string').that.is.not.empty()
 
@@ -836,19 +854,91 @@ describe('app module', () => {
     })
   })
 
-  describe('mixed sandbox option', () => {
+  describe('getGPUInfo() API', () => {
+    const appPath = path.join(__dirname, 'fixtures', 'api', 'gpu-info.js')
+
+    const getGPUInfo = async (type) => {
+      const appProcess = ChildProcess.spawn(remote.process.execPath, [appPath, type])
+      let gpuInfoData = ''
+      let errorData = ''
+      appProcess.stdout.on('data', (data) => {
+        gpuInfoData += data
+      })
+      appProcess.stderr.on('data', (data) => {
+        errorData += data
+      })
+      const [exitCode] = await emittedOnce(appProcess, 'exit')
+      if (exitCode === 0) {
+        // return info data on successful exit
+        return JSON.parse(gpuInfoData)
+      } else {
+        // return error if not clean exit
+        return Promise.reject(new Error(errorData))
+      }
+    }
+    const verifyBasicGPUInfo = async (gpuInfo) => {
+      // Devices information is always present in the available info.
+      expect(gpuInfo).to.have.own.property('gpuDevice')
+        .that.is.an('array')
+        .and.is.not.empty()
+
+      const device = gpuInfo.gpuDevice[0]
+      expect(device).to.be.an('object')
+        .and.to.have.property('deviceId')
+        .that.is.a('number')
+        .not.lessThan(0)
+    }
+
+    it('succeeds with basic GPUInfo', async () => {
+      const gpuInfo = await getGPUInfo('basic')
+      await verifyBasicGPUInfo(gpuInfo)
+    })
+
+    it('succeeds with complete GPUInfo', async () => {
+      const completeInfo = await getGPUInfo('complete')
+      if (process.platform === 'linux') {
+        // For linux and macOS complete info is same as basic info
+        await verifyBasicGPUInfo(completeInfo)
+        const basicInfo = await getGPUInfo('basic')
+        expect(completeInfo).to.deep.equal(basicInfo)
+      } else {
+        // Gl version is present in the complete info.
+        expect(completeInfo).to.have.own.property('auxAttributes')
+          .that.is.an('object')
+        expect(completeInfo.auxAttributes).to.have.own.property('glVersion')
+          .that.is.a('string')
+          .and.not.empty()
+      }
+    })
+
+    it('fails for invalid info_type', () => {
+      const invalidType = 'invalid'
+      const expectedErrorMessage = "Invalid info type. Use 'basic' or 'complete'"
+      return expect(app.getGPUInfo(invalidType)).to.eventually.be.rejectedWith(expectedErrorMessage)
+    })
+  })
+
+  describe('sandbox options', () => {
     let appProcess = null
     let server = null
     const socketPath = process.platform === 'win32' ? '\\\\.\\pipe\\electron-mixed-sandbox' : '/tmp/electron-mixed-sandbox'
 
     beforeEach(function (done) {
-      // XXX(alexeykuzmin): Calling `.skip()` inside a `before` hook
-      // doesn't affect nested `describe`s.
-      // FIXME Get these specs running on Linux
-      if (process.platform === 'linux') {
+      if (process.platform === 'linux' && (process.arch === 'arm64' || process.arch === 'arm')) {
+        // Our ARM tests are run on VSTS rather than CircleCI, and the Docker
+        // setup on VSTS disallows syscalls that Chrome requires for setting up
+        // sandboxing.
+        // See:
+        // - https://docs.docker.com/engine/security/seccomp/#significant-syscalls-blocked-by-the-default-profile
+        // - https://chromium.googlesource.com/chromium/src/+/70.0.3538.124/sandbox/linux/services/credentials.cc#292
+        // - https://github.com/docker/docker-ce/blob/ba7dfc59ccfe97c79ee0d1379894b35417b40bca/components/engine/profiles/seccomp/seccomp_default.go#L497
+        // - https://blog.jessfraz.com/post/how-to-use-new-docker-seccomp-profiles/
+        //
+        // Adding `--cap-add SYS_ADMIN` or `--security-opt seccomp=unconfined`
+        // to the Docker invocation allows the syscalls that Chrome needs, but
+        // are probably more permissive than we'd like.
         this.skip()
       }
-
       fs.unlink(socketPath, () => {
         server = net.createServer()
         server.listen(socketPath)
@@ -868,10 +958,60 @@ describe('app module', () => {
       })
     })
 
-    describe('when app.enableMixedSandbox() is called', () => {
-      it('adds --enable-sandbox to render processes created with sandbox: true', done => {
+    describe('when app.enableSandbox() is called', () => {
+      it('adds --enable-sandbox to all renderer processes', done => {
         const appPath = path.join(__dirname, 'fixtures', 'api', 'mixed-sandbox-app')
-        appProcess = ChildProcess.spawn(remote.process.execPath, [appPath])
+        appProcess = ChildProcess.spawn(remote.process.execPath, [appPath, '--app-enable-sandbox'])
+
+        server.once('error', error => { done(error) })
+
+        server.on('connection', client => {
+          client.once('data', data => {
+            const argv = JSON.parse(data)
+            expect(argv.sandbox).to.include('--enable-sandbox')
+            expect(argv.sandbox).to.not.include('--no-sandbox')
+
+            expect(argv.noSandbox).to.include('--enable-sandbox')
+            expect(argv.noSandbox).to.not.include('--no-sandbox')
+
+            expect(argv.noSandboxDevtools).to.be.true()
+            expect(argv.sandboxDevtools).to.be.true()
+
+            done()
+          })
+        })
+      })
+    })
+
+    describe('when the app is launched with --enable-sandbox', () => {
+      it('adds --enable-sandbox to all renderer processes', done => {
+        const appPath = path.join(__dirname, 'fixtures', 'api', 'mixed-sandbox-app')
+        appProcess = ChildProcess.spawn(remote.process.execPath, [appPath, '--enable-sandbox'])
+
+        server.once('error', error => { done(error) })
+
+        server.on('connection', client => {
+          client.once('data', data => {
+            const argv = JSON.parse(data)
+            expect(argv.sandbox).to.include('--enable-sandbox')
+            expect(argv.sandbox).to.not.include('--no-sandbox')
+
+            expect(argv.noSandbox).to.include('--enable-sandbox')
+            expect(argv.noSandbox).to.not.include('--no-sandbox')
+
+            expect(argv.noSandboxDevtools).to.be.true()
+            expect(argv.sandboxDevtools).to.be.true()
+
+            done()
+          })
+        })
+      })
+    })
+
+    describe('when app.enableMixedSandbox() is called', () => {
+      it('adds --enable-sandbox to renderer processes created with sandbox: true', done => {
+        const appPath = path.join(__dirname, 'fixtures', 'api', 'mixed-sandbox-app')
+        appProcess = ChildProcess.spawn(remote.process.execPath, [appPath, '--app-enable-mixed-sandbox'])
 
         server.once('error', error => { done(error) })
 
@@ -884,6 +1024,9 @@ describe('app module', () => {
             expect(argv.noSandbox).to.not.include('--enable-sandbox')
             expect(argv.noSandbox).to.include('--no-sandbox')
 
+            expect(argv.noSandboxDevtools).to.be.true()
+            expect(argv.sandboxDevtools).to.be.true()
+
             done()
           })
         })
@@ -891,7 +1034,7 @@ describe('app module', () => {
     })
 
     describe('when the app is launched with --enable-mixed-sandbox', () => {
-      it('adds --enable-sandbox to render processes created with sandbox: true', done => {
+      it('adds --enable-sandbox to renderer processes created with sandbox: true', done => {
         const appPath = path.join(__dirname, 'fixtures', 'api', 'mixed-sandbox-app')
         appProcess = ChildProcess.spawn(remote.process.execPath, [appPath, '--enable-mixed-sandbox'])
 

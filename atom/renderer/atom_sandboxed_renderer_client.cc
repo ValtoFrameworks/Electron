@@ -6,6 +6,7 @@
 
 #include "atom/common/api/api_messages.h"
 #include "atom/common/api/atom_bindings.h"
+#include "atom/common/application_info.h"
 #include "atom/common/native_mate_converters/string16_converter.h"
 #include "atom/common/native_mate_converters/value_converter.h"
 #include "atom/common/node_bindings.h"
@@ -17,11 +18,11 @@
 #include "base/files/file_path.h"
 #include "base/path_service.h"
 #include "base/process/process_handle.h"
-#include "chrome/renderer/printing/print_web_view_helper.h"
 #include "content/public/renderer/render_frame.h"
+#include "gin/converter.h"
 #include "native_mate/dictionary.h"
-#include "third_party/WebKit/public/web/WebDocument.h"
-#include "third_party/WebKit/public/web/WebKit.h"
+#include "third_party/blink/public/web/blink.h"
+#include "third_party/blink/public/web/web_document.h"
 
 #include "atom/common/node_includes.h"
 #include "atom_natives.h"  // NOLINT: This file is generated with js2c
@@ -30,12 +31,17 @@ namespace atom {
 
 namespace {
 
-const std::string kIpcKey = "ipcNative";
-const std::string kModuleCacheKey = "native-module-cache";
+const char kIpcKey[] = "ipcNative";
+const char kModuleCacheKey[] = "native-module-cache";
 
 bool IsDevTools(content::RenderFrame* render_frame) {
   return render_frame->GetWebFrame()->GetDocument().Url().ProtocolIs(
       "chrome-devtools");
+}
+
+bool IsDevToolsExtension(content::RenderFrame* render_frame) {
+  return render_frame->GetWebFrame()->GetDocument().Url().ProtocolIs(
+      "chrome-extension");
 }
 
 v8::Local<v8::Object> GetModuleCache(v8::Isolate* isolate) {
@@ -47,7 +53,7 @@ v8::Local<v8::Object> GetModuleCache(v8::Isolate* isolate) {
     global.SetHidden(kModuleCacheKey, cache);
   }
 
-  return cache->ToObject();
+  return cache->ToObject(isolate);
 }
 
 // adapted from node.cc
@@ -55,7 +61,7 @@ v8::Local<v8::Value> GetBinding(v8::Isolate* isolate,
                                 v8::Local<v8::String> key,
                                 mate::Arguments* margs) {
   v8::Local<v8::Object> exports;
-  std::string module_key = mate::V8ToString(key);
+  std::string module_key = gin::V8ToString(isolate, key);
   mate::Dictionary cache(isolate, GetModuleCache(isolate));
 
   if (cache.Get(module_key.c_str(), &exports)) {
@@ -80,21 +86,10 @@ v8::Local<v8::Value> GetBinding(v8::Isolate* isolate,
   return exports;
 }
 
-base::CommandLine::StringVector GetArgv() {
-  return base::CommandLine::ForCurrentProcess()->argv();
-}
-
-base::FilePath::StringType GetExecPath() {
-  base::FilePath path;
-  PathService::Get(base::FILE_EXE, &path);
-  return path.value();
-}
-
 v8::Local<v8::Value> CreatePreloadScript(v8::Isolate* isolate,
                                          v8::Local<v8::String> preloadSrc) {
-  auto script = v8::Script::Compile(preloadSrc);
-  auto func = script->Run();
-  return func;
+  return RendererClientBase::RunScript(isolate->GetCurrentContext(),
+                                       preloadSrc);
 }
 
 class AtomSandboxedRenderFrameObserver : public AtomRenderFrameObserver {
@@ -106,8 +101,10 @@ class AtomSandboxedRenderFrameObserver : public AtomRenderFrameObserver {
 
  protected:
   void EmitIPCEvent(blink::WebLocalFrame* frame,
-                    const base::string16& channel,
-                    const base::ListValue& args) override {
+                    bool internal,
+                    const std::string& channel,
+                    const base::ListValue& args,
+                    int32_t sender_id) override {
     if (!frame)
       return;
 
@@ -116,9 +113,10 @@ class AtomSandboxedRenderFrameObserver : public AtomRenderFrameObserver {
     auto context = frame->MainWorldScriptContext();
     v8::Context::Scope context_scope(context);
     v8::Local<v8::Value> argv[] = {mate::ConvertToV8(isolate, channel),
-                                   mate::ConvertToV8(isolate, args)};
+                                   mate::ConvertToV8(isolate, args),
+                                   mate::ConvertToV8(isolate, sender_id)};
     renderer_client_->InvokeIpcCallback(
-        context, "onMessage",
+        context, internal ? "onInternalMessage" : "onMessage",
         std::vector<v8::Local<v8::Value>>(argv, argv + node::arraysize(argv)));
   }
 
@@ -144,18 +142,16 @@ void AtomSandboxedRendererClient::InitializeBindings(
   mate::Dictionary b(isolate, binding);
   b.SetMethod("get", GetBinding);
   b.SetMethod("createPreloadScript", CreatePreloadScript);
-  b.SetMethod("crash", AtomBindings::Crash);
-  b.SetMethod("hang", AtomBindings::Hang);
-  b.SetMethod("getArgv", GetArgv);
-  b.SetMethod("getExecPath", GetExecPath);
-  b.SetMethod("getPid", &base::GetCurrentProcId);
-  b.SetMethod("getResourcesPath", &NodeBindings::GetHelperResourcesPath);
-  b.SetMethod("getHeapStatistics", &AtomBindings::GetHeapStatistics);
-  b.SetMethod("getProcessMemoryInfo", &AtomBindings::GetProcessMemoryInfo);
-  b.SetMethod("getSystemMemoryInfo", &AtomBindings::GetSystemMemoryInfo);
-  b.SetMethod("getCPUUsage", base::Bind(&AtomBindings::GetCPUUsage,
-                                        base::Unretained(metrics_.get())));
-  b.SetMethod("getIOCounters", &AtomBindings::GetIOCounters);
+
+  mate::Dictionary process = mate::Dictionary::CreateEmpty(isolate);
+  b.Set("process", process);
+
+  AtomBindings::BindProcess(isolate, &process, metrics_.get());
+
+  process.Set("argv", base::CommandLine::ForCurrentProcess()->argv());
+  process.SetReadOnly("pid", base::GetCurrentProcId());
+  process.SetReadOnly("sandboxed", true);
+  process.SetReadOnly("type", "renderer");
 
   // Pass in CLI flags needed to setup the renderer
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
@@ -182,7 +178,8 @@ void AtomSandboxedRendererClient::DidCreateScriptContext(
 
   // Only allow preload for the main frame or
   // For devtools we still want to run the preload_bundle script
-  if (!render_frame->IsMainFrame() && !IsDevTools(render_frame))
+  if (!render_frame->IsMainFrame() && !IsDevTools(render_frame) &&
+      !IsDevToolsExtension(render_frame))
     return;
 
   auto* isolate = context->GetIsolate();
@@ -193,20 +190,22 @@ void AtomSandboxedRendererClient::DidCreateScriptContext(
   std::string left = "(function(binding, require) {\n";
   std::string right = "\n})";
   // Compile the wrapper and run it to get the function object
-  auto script = v8::Script::Compile(v8::String::Concat(
-      mate::ConvertToV8(isolate, left)->ToString(),
-      v8::String::Concat(node::preload_bundle_value.ToStringChecked(isolate),
-                         mate::ConvertToV8(isolate, right)->ToString())));
-  auto func =
-      v8::Handle<v8::Function>::Cast(script->Run(context).ToLocalChecked());
+  auto source = v8::String::Concat(
+      isolate, mate::ConvertToV8(isolate, left)->ToString(isolate),
+      v8::String::Concat(isolate,
+                         node::preload_bundle_value.ToStringChecked(isolate),
+                         mate::ConvertToV8(isolate, right)->ToString(isolate)));
+  auto result = RunScript(context, source);
+
+  DCHECK(result->IsFunction());
   // Create and initialize the binding object
   auto binding = v8::Object::New(isolate);
   InitializeBindings(binding, context);
   AddRenderBindings(isolate, binding);
   v8::Local<v8::Value> args[] = {binding};
   // Execute the function with proper arguments
-  ignore_result(
-      func->Call(context, v8::Null(isolate), node::arraysize(args), args));
+  ignore_result(result.As<v8::Function>()->Call(context, v8::Null(isolate),
+                                                node::arraysize(args), args));
 }
 
 void AtomSandboxedRendererClient::WillReleaseScriptContext(
@@ -227,7 +226,7 @@ void AtomSandboxedRendererClient::InvokeIpcCallback(
     const std::string& callback_name,
     std::vector<v8::Handle<v8::Value>> args) {
   auto* isolate = context->GetIsolate();
-  auto binding_key = mate::ConvertToV8(isolate, kIpcKey)->ToString();
+  auto binding_key = mate::ConvertToV8(isolate, kIpcKey)->ToString(isolate);
   auto private_binding_key = v8::Private::ForApi(isolate, binding_key);
   auto global_object = context->Global();
   v8::Local<v8::Value> value;
@@ -235,8 +234,9 @@ void AtomSandboxedRendererClient::InvokeIpcCallback(
     return;
   if (value.IsEmpty() || !value->IsObject())
     return;
-  auto binding = value->ToObject();
-  auto callback_key = mate::ConvertToV8(isolate, callback_name)->ToString();
+  auto binding = value->ToObject(isolate);
+  auto callback_key =
+      mate::ConvertToV8(isolate, callback_name)->ToString(isolate);
   auto callback_value = binding->Get(callback_key);
   DCHECK(callback_value->IsFunction());  // set by sandboxed_renderer/init.js
   auto callback = v8::Handle<v8::Function>::Cast(callback_value);

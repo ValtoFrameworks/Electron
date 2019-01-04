@@ -4,11 +4,13 @@
 
 #include "atom/common/native_mate_converters/network_converter.h"
 
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "atom/common/native_mate_converters/value_converter.h"
+#include "base/numerics/safe_conversions.h"
 #include "native_mate/dictionary.h"
 #include "services/network/public/cpp/resource_request_body.h"
 
@@ -65,7 +67,9 @@ bool Converter<scoped_refptr<network::ResourceRequestBody>>::FromV8(
     if (type == "rawData") {
       base::Value* bytes = nullptr;
       dict->GetBinary("bytes", &bytes);
-      (*out)->AppendBytes(bytes->GetBlob().data(), bytes->GetBlob().size());
+      (*out)->AppendBytes(
+          reinterpret_cast<const char*>(bytes->GetBlob().data()),
+          base::checked_cast<int>(bytes->GetBlob().size()));
     } else if (type == "file") {
       std::string file;
       int offset = 0, length = -1;

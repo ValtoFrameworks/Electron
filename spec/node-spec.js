@@ -1,11 +1,14 @@
-const assert = require('assert')
 const ChildProcess = require('child_process')
+const chai = require('chai')
+const { expect } = chai
+const dirtyChai = require('dirty-chai')
 const fs = require('fs')
 const path = require('path')
 const os = require('os')
-const {ipcRenderer, remote} = require('electron')
+const { ipcRenderer, remote } = require('electron')
 
 const isCI = remote.getGlobal('isCi')
+chai.use(dirtyChai)
 
 describe('node feature', () => {
   const fixtures = path.join(__dirname, 'fixtures')
@@ -14,8 +17,8 @@ describe('node feature', () => {
     describe('child_process.fork', () => {
       it('works in current process', (done) => {
         const child = ChildProcess.fork(path.join(fixtures, 'module', 'ping.js'))
-        child.on('message', (msg) => {
-          assert.equal(msg, 'message')
+        child.on('message', msg => {
+          expect(msg).to.equal('message')
           done()
         })
         child.send('message')
@@ -25,7 +28,7 @@ describe('node feature', () => {
         const args = ['--expose_gc', '-test', '1']
         const child = ChildProcess.fork(path.join(fixtures, 'module', 'process_args.js'), args)
         child.on('message', (msg) => {
-          assert.deepEqual(args, msg.slice(2))
+          expect(args).to.deep.equal(msg.slice(2))
           done()
         })
         child.send('message')
@@ -34,7 +37,7 @@ describe('node feature', () => {
       it('works in forked process', (done) => {
         const child = ChildProcess.fork(path.join(fixtures, 'module', 'fork_ping.js'))
         child.on('message', (msg) => {
-          assert.equal(msg, 'message')
+          expect(msg).to.equal('message')
           done()
         })
         child.send('message')
@@ -45,7 +48,7 @@ describe('node feature', () => {
           path: process.env['PATH']
         })
         child.on('message', (msg) => {
-          assert.equal(msg, 'message')
+          expect(msg).to.equal('message')
           done()
         })
         child.send('message')
@@ -55,7 +58,7 @@ describe('node feature', () => {
         const fork = remote.require('child_process').fork
         const child = fork(path.join(fixtures, 'module', 'ping.js'))
         child.on('message', (msg) => {
-          assert.equal(msg, 'message')
+          expect(msg).to.equal('message')
           done()
         })
         child.send('message')
@@ -64,7 +67,7 @@ describe('node feature', () => {
       it('has String::localeCompare working in script', (done) => {
         const child = ChildProcess.fork(path.join(fixtures, 'module', 'locale-compare.js'))
         child.on('message', (msg) => {
-          assert.deepEqual(msg, [0, -1, 1])
+          expect(msg).to.deep.equal([0, -1, 1])
           done()
         })
         child.send('message')
@@ -73,21 +76,21 @@ describe('node feature', () => {
       it('has setImmediate working in script', (done) => {
         const child = ChildProcess.fork(path.join(fixtures, 'module', 'set-immediate.js'))
         child.on('message', (msg) => {
-          assert.equal(msg, 'ok')
+          expect(msg).to.equal('ok')
           done()
         })
         child.send('message')
       })
 
       it('pipes stdio', (done) => {
-        const child = ChildProcess.fork(path.join(fixtures, 'module', 'process-stdout.js'), {silent: true})
+        const child = ChildProcess.fork(path.join(fixtures, 'module', 'process-stdout.js'), { silent: true })
         let data = ''
         child.stdout.on('data', (chunk) => {
           data += String(chunk)
         })
         child.on('close', (code) => {
-          assert.equal(code, 0)
-          assert.equal(data, 'pipes stdio')
+          expect(code).to.equal(0)
+          expect(data).to.equal('pipes stdio')
           done()
         })
       })
@@ -96,7 +99,7 @@ describe('node feature', () => {
         const source = "process.on('message', (message) => { process.send(message) })"
         const forked = ChildProcess.fork('--eval', [source])
         forked.once('message', (message) => {
-          assert.equal(message, 'hello')
+          expect(message).to.equal('hello')
           done()
         })
         forked.send('hello')
@@ -118,11 +121,11 @@ describe('node feature', () => {
         })
 
         let output = ''
-        child.stdout.on('data', (data) => {
+        child.stdout.on('data', data => {
           output += data
         })
         child.stdout.on('close', () => {
-          assert.deepEqual(JSON.parse(output), {
+          expect(JSON.parse(output)).to.deep.equal({
             processLog: process.platform === 'win32' ? 'function' : 'undefined',
             processType: 'undefined',
             window: 'undefined'
@@ -148,11 +151,9 @@ describe('node feature', () => {
         const listeners = process.listeners('uncaughtException')
         process.removeAllListeners('uncaughtException')
         process.on('uncaughtException', (thrown) => {
-          assert.strictEqual(thrown, error)
+          expect(thrown).to.equal(error)
           process.removeAllListeners('uncaughtException')
-          listeners.forEach((listener) => {
-            process.on('uncaughtException', listener)
-          })
+          listeners.forEach((listener) => process.on('uncaughtException', listener))
           done()
         })
         fs.readFile(__filename, () => {
@@ -164,14 +165,14 @@ describe('node feature', () => {
     describe('error thrown in main process node context', () => {
       it('gets emitted as a process uncaughtException event', () => {
         const error = ipcRenderer.sendSync('handle-uncaught-exception', 'hello')
-        assert.equal(error, 'hello')
+        expect(error).to.equal('hello')
       })
     })
 
     describe('promise rejection in main process node context', () => {
       it('gets emitted as a process unhandledRejection event', () => {
         const error = ipcRenderer.sendSync('handle-unhandled-rejection', 'hello')
-        assert.equal(error, 'hello')
+        expect(error).to.equal('hello')
       })
     })
 
@@ -190,9 +191,8 @@ describe('node feature', () => {
         let interval = null
         let clearing = false
         const clear = () => {
-          if (interval === null || clearing) {
-            return
-          }
+          if (interval === null || clearing) return
+
           // interval might trigger while clearing (remote is slow sometimes)
           clearing = true
           remote.getGlobal('clearInterval')(interval)
@@ -206,10 +206,10 @@ describe('node feature', () => {
   })
 
   describe('inspector', () => {
-    let child
+    let child = null
 
     afterEach(() => {
-      if (child != null) child.kill()
+      if (child !== null) child.kill()
     })
 
     it('supports starting the v8 inspector with --inspect/--inspect-brk', (done) => {
@@ -220,13 +220,40 @@ describe('node feature', () => {
       })
 
       let output = ''
-      child.stderr.on('data', (data) => {
+      function cleanup () {
+        child.stderr.removeListener('data', errorDataListener)
+        child.stdout.removeListener('data', outDataHandler)
+      }
+      function errorDataListener (data) {
         output += data
-        if (output.trim().startsWith('Debugger listening on ws://')) done()
-      })
-
-      child.stdout.on('data', (data) => {
+        if (output.trim().startsWith('Debugger listening on ws://')) {
+          cleanup()
+          done()
+        }
+      }
+      function outDataHandler (data) {
+        cleanup()
         done(new Error(`Unexpected output: ${data.toString()}`))
+      }
+      child.stderr.on('data', errorDataListener)
+      child.stdout.on('data', outDataHandler)
+    })
+
+    it('does not start the v8 inspector when --inspect is after a -- argument', (done) => {
+      child = ChildProcess.spawn(remote.process.execPath, [path.join(__dirname, 'fixtures', 'module', 'noop.js'), '--', '--inspect'])
+
+      let output = ''
+      function dataListener (data) {
+        output += data
+      }
+      child.stderr.on('data', dataListener)
+      child.stdout.on('data', dataListener)
+      child.on('exit', () => {
+        if (output.trim().startsWith('Debugger listening on ws://')) {
+          done(new Error('Inspector was started when it should not have been'))
+        } else {
+          done()
+        }
       })
     })
 
@@ -238,11 +265,10 @@ describe('node feature', () => {
         stdio: ['ipc']
       })
 
-      child.on('message', ({cmd, debuggerEnabled, secondSessionOpened, success}) => {
+      child.on('message', ({ cmd, debuggerEnabled, success }) => {
         if (cmd === 'assert') {
-          assert.equal(debuggerEnabled, true)
-          assert.equal(secondSessionOpened, true)
-          assert.equal(success, true)
+          expect(debuggerEnabled).to.be.true()
+          expect(success).to.be.true()
           done()
         }
       })
@@ -251,29 +277,21 @@ describe('node feature', () => {
 
   describe('message loop', () => {
     describe('process.nextTick', () => {
-      it('emits the callback', (done) => {
-        process.nextTick(done)
-      })
+      it('emits the callback', (done) => process.nextTick(done))
 
       it('works in nested calls', (done) => {
         process.nextTick(() => {
-          process.nextTick(() => {
-            process.nextTick(done)
-          })
+          process.nextTick(() => process.nextTick(done))
         })
       })
     })
 
     describe('setImmediate', () => {
-      it('emits the callback', (done) => {
-        setImmediate(done)
-      })
+      it('emits the callback', (done) => setImmediate(done))
 
       it('works in nested calls', (done) => {
         setImmediate(() => {
-          setImmediate(() => {
-            setImmediate(done)
-          })
+          setImmediate(() => setImmediate(done))
         })
       })
     })
@@ -291,10 +309,10 @@ describe('node feature', () => {
       const script = path.join(fixtures, 'module', 'create_socket.js')
       const child = ChildProcess.fork(script, [socketPath])
       child.on('exit', (code) => {
-        assert.equal(code, 0)
+        expect(code).to.equal(0)
         const client = require('net').connect(socketPath)
         client.on('error', (error) => {
-          assert.equal(error.code, 'ECONNREFUSED')
+          expect(error.code).to.equal('ECONNREFUSED')
           done()
         })
       })
@@ -306,23 +324,23 @@ describe('node feature', () => {
       const p = document.createElement('p')
       p.innerText = '闲云潭影日悠悠，物换星移几度秋'
       const b = Buffer.from(p.innerText)
-      assert.equal(b.toString(), '闲云潭影日悠悠，物换星移几度秋')
-      assert.equal(Buffer.byteLength(p.innerText), 45)
+      expect(b.toString()).to.equal('闲云潭影日悠悠，物换星移几度秋')
+      expect(Buffer.byteLength(p.innerText)).to.equal(45)
     })
 
     it('correctly parses external one-byte UTF8 string', () => {
       const p = document.createElement('p')
       p.innerText = 'Jøhänñéß'
       const b = Buffer.from(p.innerText)
-      assert.equal(b.toString(), 'Jøhänñéß')
-      assert.equal(Buffer.byteLength(p.innerText), 13)
+      expect(b.toString()).to.equal('Jøhänñéß')
+      expect(Buffer.byteLength(p.innerText)).to.equal(13)
     })
 
     it('does not crash when creating large Buffers', () => {
       let buffer = Buffer.from(new Array(4096).join(' '))
-      assert.equal(buffer.length, 4095)
+      expect(buffer.length).to.equal(4095)
       buffer = Buffer.from(new Array(4097).join(' '))
-      assert.equal(buffer.length, 4096)
+      expect(buffer.length).to.equal(4096)
     })
 
     it('does not crash for crypto operations', () => {
@@ -331,79 +349,78 @@ describe('node feature', () => {
       const key = 'q90K9yBqhWZnAMCMTOJfPQ=='
       const cipherText = '{"error_code":114,"error_message":"Tham số không hợp lệ","data":null}'
       for (let i = 0; i < 10000; ++i) {
-        let iv = Buffer.from('0'.repeat(32), 'hex')
-        let input = Buffer.from(data, 'base64')
-        let decipher = crypto.createDecipheriv('aes-128-cbc', Buffer.from(key, 'base64'), iv)
-        let result = Buffer.concat([decipher.update(input), decipher.final()])
-        assert.equal(cipherText, result)
+        const iv = Buffer.from('0'.repeat(32), 'hex')
+        const input = Buffer.from(data, 'base64')
+        const decipher = crypto.createDecipheriv('aes-128-cbc', Buffer.from(key, 'base64'), iv)
+        const result = Buffer.concat([decipher.update(input), decipher.final()]).toString('utf8')
+        expect(cipherText).to.equal(result)
       }
     })
   })
 
   describe('process.stdout', () => {
     it('does not throw an exception when accessed', () => {
-      assert.doesNotThrow(() => {
-        // eslint-disable-next-line
-        process.stdout
-      })
+      expect(() => process.stdout).to.not.throw()
     })
 
     it('does not throw an exception when calling write()', () => {
-      assert.doesNotThrow(() => {
+      expect(() => {
         process.stdout.write('test')
-      })
+      }).to.not.throw()
     })
 
     it('should have isTTY defined on Mac and Linux', function () {
       if (isCI || process.platform === 'win32') {
-        // FIXME(alexeykuzmin): Skip the test.
-        // this.skip()
+        this.skip()
         return
       }
 
-      assert.equal(typeof process.stdout.isTTY, 'boolean')
+      expect(process.stdout.isTTY).to.be.a('boolean')
     })
 
     it('should have isTTY undefined on Windows', function () {
       if (isCI || process.platform !== 'win32') {
-        // FIXME(alexeykuzmin): Skip the test.
-        // this.skip()
+        this.skip()
         return
       }
 
-      assert.equal(process.stdout.isTTY, undefined)
+      expect(process.stdout.isTTY).to.be.undefined()
     })
   })
 
   describe('process.stdin', () => {
     it('does not throw an exception when accessed', () => {
-      assert.doesNotThrow(() => {
-        process.stdin // eslint-disable-line
-      })
+      expect(() => process.stdin).to.not.throw()
     })
 
     it('returns null when read from', () => {
-      assert.equal(process.stdin.read(), null)
+      expect(process.stdin.read()).to.be.null()
     })
   })
 
   describe('process.version', () => {
     it('should not have -pre', () => {
-      assert(!process.version.endsWith('-pre'))
+      expect(process.version.endsWith('-pre')).to.be.false()
     })
   })
 
-  describe('vm.createContext', () => {
+  describe('vm.runInNewContext', () => {
     it('should not crash', () => {
       require('vm').runInNewContext('')
     })
   })
 
   it('includes the electron version in process.versions', () => {
-    assert(/^\d+\.\d+\.\d+(\S*)?$/.test(process.versions.electron))
+    expect(process.versions)
+      .to.have.own.property('electron')
+      .that.is.a('string')
+      .and.matches(/^\d+\.\d+\.\d+(\S*)?$/)
   })
 
   it('includes the chrome version in process.versions', () => {
-    assert(/^\d+\.\d+\.\d+\.\d+$/.test(process.versions.chrome))
+    expect(process.versions)
+      .to.have.own.property('chrome')
+      .that.is.a('string')
+      .and.matches(/^\d+\.\d+\.\d+\.\d+$/)
   })
 })

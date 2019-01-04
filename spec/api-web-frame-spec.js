@@ -2,28 +2,28 @@ const assert = require('assert')
 const chai = require('chai')
 const dirtyChai = require('dirty-chai')
 const path = require('path')
-const {closeWindow} = require('./window-helpers')
-const {remote, webFrame} = require('electron')
-const {BrowserWindow, protocol, ipcMain} = remote
-const {emittedOnce} = require('./events-helpers')
+const { closeWindow } = require('./window-helpers')
+const { remote, webFrame } = require('electron')
+const { BrowserWindow, protocol, ipcMain } = remote
 
-const {expect} = chai
+const { expect } = chai
 chai.use(dirtyChai)
 
 /* Most of the APIs here don't use standard callbacks */
 /* eslint-disable standard/no-callback-literal */
 
 describe('webFrame module', function () {
-  var fixtures = path.resolve(__dirname, 'fixtures')
-  var w = null
+  const fixtures = path.resolve(__dirname, 'fixtures')
+  let w = null
 
   afterEach(function () {
     return closeWindow(w).then(function () { w = null })
   })
 
-  describe('webFrame.registerURLSchemeAsPrivileged', function () {
+  // FIXME: Disabled with C70.
+  xdescribe('webFrame.registerURLSchemeAsPrivileged', function () {
     it('supports fetch api by default', function (done) {
-      var url = 'file://' + fixtures + '/assets/logo.png'
+      const url = 'file://' + fixtures + '/assets/logo.png'
       window.fetch(url).then(function (response) {
         assert(response.ok)
         done()
@@ -102,14 +102,14 @@ describe('webFrame module', function () {
       </html>`, done)
     })
 
-    var runNumber = 1
+    let runNumber = 1
     function allowsCORSRequests (expected, content, done) {
       const standardScheme = remote.getGlobal('standardScheme') + runNumber
       const corsScheme = 'cors' + runNumber
       runNumber++
 
       const url = standardScheme + '://fake-host'
-      w = new BrowserWindow({show: false})
+      w = new BrowserWindow({ show: false })
       after(function (done) {
         protocol.unregisterProtocol(corsScheme, function () {
           protocol.unregisterProtocol(standardScheme, function () {
@@ -119,7 +119,7 @@ describe('webFrame module', function () {
       })
 
       const handler = function (request, callback) {
-        callback({data: content, mimeType: 'text/html'})
+        callback({ data: content, mimeType: 'text/html' })
       }
       protocol.registerStringProtocol(standardScheme, handler, function (error) {
         if (error) return done(error)
@@ -130,7 +130,7 @@ describe('webFrame module', function () {
       }, function (error) {
         if (error) return done(error)
         ipcMain.once('response', function (event, status) {
-          assert.equal(status, expected)
+          assert.strictEqual(status, expected)
           done()
         })
         w.loadURL(url)
@@ -146,16 +146,27 @@ describe('webFrame module', function () {
   })
 
   it('calls a spellcheck provider', async () => {
-    w = new BrowserWindow({show: false})
-    w.loadURL(`file://${fixtures}/pages/webframe-spell-check.html`)
-    await emittedOnce(w.webContents, 'did-finish-load')
+    w = new BrowserWindow({ show: false })
+    await w.loadFile(path.join(fixtures, 'pages', 'webframe-spell-check.html'))
+    w.focus()
+    await w.webContents.executeJavaScript('document.querySelector("input").focus()', true)
 
-    const spellCheckerFeedback = emittedOnce(ipcMain, 'spec-spell-check')
-    const misspelledWord = 'spleling'
-    for (const keyCode of [...misspelledWord, ' ']) {
-      w.webContents.sendInputEvent({type: 'char', keyCode})
+    const spellCheckerFeedback =
+      new Promise(resolve => {
+        ipcMain.on('spec-spell-check', (e, words, callback) => {
+          if (words.length === 2) {
+            // The promise is resolved only after this event is received twice
+            // Array contains only 1 word first time and 2 the next time
+            resolve([words, callback])
+          }
+        })
+      })
+    const inputText = 'spleling test '
+    for (const keyCode of inputText) {
+      w.webContents.sendInputEvent({ type: 'char', keyCode })
     }
-    const [, text] = await spellCheckerFeedback
-    expect(text).to.equal(misspelledWord)
+    const [words, callback] = await spellCheckerFeedback
+    expect(words).to.deep.equal(['spleling', 'test'])
+    expect(callback).to.be.true()
   })
 })

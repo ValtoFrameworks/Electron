@@ -7,17 +7,31 @@
 #include <algorithm>
 #include <iostream>
 #include <string>
+#include <utility>
+#include <vector>
 
+#include "atom/browser/browser.h"
 #include "atom/common/api/locker.h"
+#include "atom/common/application_info.h"
 #include "atom/common/atom_version.h"
-#include "atom/common/chrome_version.h"
+#include "atom/common/heap_snapshot.h"
+#include "atom/common/native_mate_converters/file_path_converter.h"
 #include "atom/common/native_mate_converters/string16_converter.h"
-#include "atom/common/node_includes.h"
+#include "atom/common/promise_util.h"
 #include "base/logging.h"
+#include "base/process/process_handle.h"
 #include "base/process/process_info.h"
 #include "base/process/process_metrics_iocounters.h"
 #include "base/sys_info.h"
+#include "base/threading/thread_restrictions.h"
+#include "chrome/common/chrome_version.h"
 #include "native_mate/dictionary.h"
+#include "services/resource_coordinator/public/cpp/memory_instrumentation/global_memory_dump.h"
+#include "services/resource_coordinator/public/cpp/memory_instrumentation/memory_instrumentation.h"
+
+// Must be the last in the includes list, otherwise the definition of chromium
+// macros conflicts with node macros.
+#include "atom/common/node_includes.h"
 
 namespace atom {
 
@@ -47,35 +61,49 @@ AtomBindings::~AtomBindings() {
   uv_close(reinterpret_cast<uv_handle_t*>(&call_next_tick_async_), nullptr);
 }
 
+// static
+void AtomBindings::BindProcess(v8::Isolate* isolate,
+                               mate::Dictionary* process,
+                               base::ProcessMetrics* metrics) {
+  // These bindings are shared between sandboxed & unsandboxed renderers
+  process->SetMethod("crash", &Crash);
+  process->SetMethod("hang", &Hang);
+  process->SetMethod("log", &Log);
+  process->SetMethod("getCreationTime", &GetCreationTime);
+  process->SetMethod("getHeapStatistics", &GetHeapStatistics);
+  process->SetMethod("getProcessMemoryInfo", &GetProcessMemoryInfo);
+  process->SetMethod("getSystemMemoryInfo", &GetSystemMemoryInfo);
+  process->SetMethod("getIOCounters", &GetIOCounters);
+  process->SetMethod("getCPUUsage", base::Bind(&AtomBindings::GetCPUUsage,
+                                               base::Unretained(metrics)));
+
+#if defined(MAS_BUILD)
+  process->SetReadOnly("mas", true);
+#endif
+
+#if defined(OS_WIN)
+  if (IsRunningInDesktopBridge())
+    process->SetReadOnly("windowsStore", true);
+#endif
+}
+
 void AtomBindings::BindTo(v8::Isolate* isolate, v8::Local<v8::Object> process) {
   isolate->SetFatalErrorHandler(FatalErrorCallback);
 
   mate::Dictionary dict(isolate, process);
-  dict.SetMethod("crash", &AtomBindings::Crash);
-  dict.SetMethod("hang", &Hang);
-  dict.SetMethod("log", &Log);
-  dict.SetMethod("getHeapStatistics", &GetHeapStatistics);
-  dict.SetMethod("getProcessMemoryInfo", &GetProcessMemoryInfo);
-  dict.SetMethod("getCreationTime", &GetCreationTime);
-  dict.SetMethod("getSystemMemoryInfo", &GetSystemMemoryInfo);
-  dict.SetMethod("getCPUUsage", base::Bind(&AtomBindings::GetCPUUsage,
-                                           base::Unretained(metrics_.get())));
-  dict.SetMethod("getIOCounters", &GetIOCounters);
+  BindProcess(isolate, &dict, metrics_.get());
+
+  dict.SetMethod("takeHeapSnapshot", &TakeHeapSnapshot);
 #if defined(OS_POSIX)
-  dict.SetMethod("setFdLimit", &base::SetFdLimit);
+  dict.SetMethod("setFdLimit", &base::IncreaseFdLimitTo);
 #endif
   dict.SetMethod("activateUvLoop", base::Bind(&AtomBindings::ActivateUVLoop,
                                               base::Unretained(this)));
 
-#if defined(MAS_BUILD)
-  dict.Set("mas", true);
-#endif
-
   mate::Dictionary versions;
   if (dict.Get("versions", &versions)) {
-    // TODO(kevinsawicki): Make read-only in 2.0 to match node
-    versions.Set(ATOM_PROJECT_NAME, ATOM_VERSION_STRING);
-    versions.Set("chrome", CHROME_VERSION_STRING);
+    versions.SetReadOnly(ATOM_PROJECT_NAME, ATOM_VERSION_STRING);
+    versions.SetReadOnly("chrome", CHROME_VERSION_STRING);
   }
 }
 
@@ -160,26 +188,6 @@ v8::Local<v8::Value> AtomBindings::GetHeapStatistics(v8::Isolate* isolate) {
 }
 
 // static
-v8::Local<v8::Value> AtomBindings::GetProcessMemoryInfo(v8::Isolate* isolate) {
-  auto metrics = base::ProcessMetrics::CreateCurrentProcessMetrics();
-
-  mate::Dictionary dict = mate::Dictionary::CreateEmpty(isolate);
-  dict.SetHidden("simple", true);
-  dict.Set("workingSetSize",
-           static_cast<double>(metrics->GetWorkingSetSize() >> 10));
-  dict.Set("peakWorkingSetSize",
-           static_cast<double>(metrics->GetPeakWorkingSetSize() >> 10));
-
-  size_t private_bytes, shared_bytes;
-  if (metrics->GetMemoryBytes(&private_bytes, &shared_bytes)) {
-    dict.Set("privateBytes", static_cast<double>(private_bytes >> 10));
-    dict.Set("sharedBytes", static_cast<double>(shared_bytes >> 10));
-  }
-
-  return dict.GetHandle();
-}
-
-// static
 v8::Local<v8::Value> AtomBindings::GetCreationTime(v8::Isolate* isolate) {
   auto timeValue = base::CurrentProcessInfo::CreationTime();
   if (timeValue.is_null()) {
@@ -221,6 +229,67 @@ v8::Local<v8::Value> AtomBindings::GetSystemMemoryInfo(v8::Isolate* isolate,
 }
 
 // static
+v8::Local<v8::Promise> AtomBindings::GetProcessMemoryInfo(
+    v8::Isolate* isolate) {
+  scoped_refptr<util::Promise> promise = new util::Promise(isolate);
+
+  if (mate::Locker::IsBrowserProcess() && !Browser::Get()->is_ready()) {
+    promise->RejectWithErrorMessage(
+        "Memory Info is available only after app ready");
+    return promise->GetHandle();
+  }
+
+  v8::Global<v8::Context> context(isolate, isolate->GetCurrentContext());
+  memory_instrumentation::MemoryInstrumentation::GetInstance()
+      ->RequestGlobalDumpForPid(base::GetCurrentProcId(),
+                                std::vector<std::string>(),
+                                base::Bind(&AtomBindings::DidReceiveMemoryDump,
+                                           std::move(context), promise));
+  return promise->GetHandle();
+}
+
+// static
+void AtomBindings::DidReceiveMemoryDump(
+    const v8::Global<v8::Context>& context,
+    scoped_refptr<util::Promise> promise,
+    bool success,
+    std::unique_ptr<memory_instrumentation::GlobalMemoryDump> global_dump) {
+  v8::Isolate* isolate = promise->isolate();
+  mate::Locker locker(isolate);
+  v8::HandleScope handle_scope(isolate);
+  v8::MicrotasksScope script_scope(isolate,
+                                   v8::MicrotasksScope::kRunMicrotasks);
+  v8::Context::Scope context_scope(
+      v8::Local<v8::Context>::New(isolate, context));
+
+  if (!success) {
+    promise->RejectWithErrorMessage("Failed to create memory dump");
+    return;
+  }
+
+  bool resolved = false;
+  for (const memory_instrumentation::GlobalMemoryDump::ProcessDump& dump :
+       global_dump->process_dumps()) {
+    if (base::GetCurrentProcId() == dump.pid()) {
+      mate::Dictionary dict = mate::Dictionary::CreateEmpty(isolate);
+      const auto& osdump = dump.os_dump();
+#if defined(OS_LINUX) || defined(OS_WIN)
+      dict.Set("residentSet", osdump.resident_set_kb);
+#endif
+      dict.Set("private", osdump.private_footprint_kb);
+      dict.Set("shared", osdump.shared_footprint_kb);
+      promise->Resolve(dict.GetHandle());
+      resolved = true;
+      break;
+    }
+  }
+  if (!resolved) {
+    promise->RejectWithErrorMessage(
+        R"(Failed to find current process memory details in memory dump)");
+  }
+}
+
+// static
 v8::Local<v8::Value> AtomBindings::GetCPUUsage(base::ProcessMetrics* metrics,
                                                v8::Isolate* isolate) {
   mate::Dictionary dict = mate::Dictionary::CreateEmpty(isolate);
@@ -257,6 +326,17 @@ v8::Local<v8::Value> AtomBindings::GetIOCounters(v8::Isolate* isolate) {
   }
 
   return dict.GetHandle();
+}
+
+// static
+bool AtomBindings::TakeHeapSnapshot(v8::Isolate* isolate,
+                                    const base::FilePath& file_path) {
+  base::ThreadRestrictions::ScopedAllowIO allow_io;
+
+  base::File file(file_path,
+                  base::File::FLAG_CREATE_ALWAYS | base::File::FLAG_WRITE);
+
+  return atom::TakeHeapSnapshot(isolate, &file);
 }
 
 }  // namespace atom

@@ -1,0 +1,18 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: deepak1556 <hop2deep@gmail.com>
+Date: Thu, 20 Sep 2018 17:47:47 -0700
+Subject: blink-worker-enable-csp-in-file-scheme.patch
+
+
+diff --git a/third_party/blink/renderer/core/workers/worker_classic_script_loader.cc b/third_party/blink/renderer/core/workers/worker_classic_script_loader.cc
+index fae3bbccaf04ae653b52b484334a1b402a127b76..5a13426281adb0d51a5259346c1f588a67a78e07 100644
+--- a/third_party/blink/renderer/core/workers/worker_classic_script_loader.cc
++++ b/third_party/blink/renderer/core/workers/worker_classic_script_loader.cc
+@@ -261,7 +261,6 @@ void WorkerClassicScriptLoader::ProcessContentSecurityPolicy(
+   // document (which is implemented in WorkerMessagingProxy, and
+   // m_contentSecurityPolicy should be left as nullptr to inherit the policy).
+   if (!response.Url().ProtocolIs("blob") &&
+-      !response.Url().ProtocolIs("file") &&
+       !response.Url().ProtocolIs("filesystem")) {
+     content_security_policy_ = ContentSecurityPolicy::Create();
+     content_security_policy_->SetOverrideURLForSelf(response.Url());

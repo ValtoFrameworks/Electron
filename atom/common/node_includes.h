@@ -30,13 +30,13 @@
 #undef NO_RETURN
 #undef LIKELY
 #undef arraysize
-#undef debug_string  // This is defined in macOS 10.9 SDK in AssertMacros.h.
+#undef debug_string  // This is defined in macOS SDK in AssertMacros.h.
 #include "env-inl.h"
 #include "env.h"
 #include "node.h"
 #include "node_buffer.h"
-#include "node_debug_options.h"
 #include "node_internals.h"
+#include "node_options.h"
 #include "node_platform.h"
 
 namespace node {
@@ -45,7 +45,8 @@ namespace tracing {
 class TraceEventHelper {
  public:
   static v8::TracingController* GetTracingController();
-  static void SetTracingController(v8::TracingController* controller);
+  static node::tracing::Agent* GetAgent();
+  static void SetAgent(node::tracing::Agent* agent);
 };
 
 }  // namespace tracing

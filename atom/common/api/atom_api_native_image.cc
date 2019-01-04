@@ -4,7 +4,9 @@
 
 #include "atom/common/api/atom_api_native_image.h"
 
+#include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "atom/common/asar/asar_util.h"
@@ -193,11 +195,11 @@ base::win::ScopedHICON ReadICOFromPath(int size, const base::FilePath& path) {
 
 bool ReadImageSkiaFromICO(gfx::ImageSkia* image, HICON icon) {
   // Convert the icon from the Windows specific HICON to gfx::ImageSkia.
-  std::unique_ptr<SkBitmap> bitmap(IconUtil::CreateSkBitmapFromHICON(icon));
-  if (!bitmap)
+  SkBitmap bitmap = IconUtil::CreateSkBitmapFromHICON(icon);
+  if (bitmap.isNull())
     return false;
 
-  image->AddRepresentation(gfx::ImageSkiaRep(*bitmap, 1.0f));
+  image->AddRepresentation(gfx::ImageSkiaRep(bitmap, 1.0f));
   return true;
 }
 #endif
